@@ -11,6 +11,8 @@
 <p align="center">
   <a href="https://pypi.org/project/semanticlint/"><img src="https://img.shields.io/pypi/v/semanticlint" alt="PyPI version"/></a>
   <a href="https://github.com/gbelbe/semanticlint/actions"><img src="https://github.com/gbelbe/semanticlint/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://codecov.io/gh/gbelbe/semanticlint"><img src="https://codecov.io/gh/gbelbe/semanticlint/graph/badge.svg" alt="Coverage"/></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"/></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"/></a>
 </p>
 
