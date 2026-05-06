@@ -77,25 +77,3 @@ def run_check(cli_path: Path):
 @when(parsers.parse('I run semanticlint check with fail-on "{level}"'), target_fixture="result")
 def run_check_fail_on(cli_path: Path, level: str):
     return runner.invoke(app, ["check", str(cli_path), "--fail-on", level])
-
-
-# ── Then ──────────────────────────────────────────────────────────────────────
-
-
-def _then_exit(result, code: int) -> None:
-    assert result.exit_code == code, (
-        f"Expected exit {code}, got {result.exit_code}.\nOutput:\n{result.output}"
-    )
-
-
-from pytest_bdd import then  # noqa: E402
-
-
-@then("the exit code is 0")
-def exit_zero(result) -> None:
-    _then_exit(result, 0)
-
-
-@then("the exit code is 1")
-def exit_one(result) -> None:
-    _then_exit(result, 1)

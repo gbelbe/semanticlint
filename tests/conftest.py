@@ -3,6 +3,24 @@ from __future__ import annotations
 import pytest
 from pytest_bdd import parsers, then
 
+# ── Shared CLI "Then" steps ───────────────────────────────────────────────────
+
+
+def _assert_exit(result, code: int) -> None:
+    assert result.exit_code == code, (
+        f"Expected exit {code}, got {result.exit_code}.\nOutput:\n{result.output}"
+    )
+
+
+@then("the exit code is 0")
+def exit_zero(result) -> None:
+    _assert_exit(result, 0)
+
+
+@then("the exit code is 1")
+def exit_one(result) -> None:
+    _assert_exit(result, 1)
+
 
 @pytest.fixture()
 def clean_registry():

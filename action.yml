@@ -1,0 +1,46 @@
+name: semanticlint
+description: Lint and quality-check RDF, SKOS, OWL and RDFS vocabulary files.
+author: gbelbe
+
+inputs:
+  path:
+    description: File or directory to check (default: repo root).
+    required: false
+    default: "."
+  fail-on:
+    description: "Minimum severity that causes a failed check: error | warning | info"
+    required: false
+    default: "error"
+  config:
+    description: Path to an onto-ci.yml config file.
+    required: false
+    default: ""
+  version:
+    description: semanticlint version to install (default: latest).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install semanticlint
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.version }}" ]; then
+          pip install "semanticlint==${{ inputs.version }}"
+        else
+          pip install semanticlint
+        fi
+
+    - name: Run semanticlint check
+      shell: bash
+      run: |
+        ARGS="${{ inputs.path }}"
+        if [ -n "${{ inputs.config }}" ]; then
+          ARGS="$ARGS --config ${{ inputs.config }}"
+        fi
+        semanticlint check $ARGS --fail-on "${{ inputs.fail-on }}"

@@ -134,5 +134,58 @@ def version() -> None:
     typer.echo(pkg_version("semanticlint"))
 
 
+_WORKFLOW_TEMPLATE = """\
+name: Ontology CI
+
+on:
+  push:
+    branches: ["master", "main"]
+    paths: ["**.ttl", "**.rdf", "**.owl", "onto-ci.yml"]
+  pull_request:
+    branches: ["master", "main"]
+    paths: ["**.ttl", "**.rdf", "**.owl", "onto-ci.yml"]
+
+jobs:
+  lint:
+    name: Lint vocabulary files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gbelbe/semanticlint@{action_version}
+        with:
+          path: "."
+          fail-on: {fail_on}
+"""
+
+_WORKFLOW_FILE = Path(".github") / "workflows" / "ontology-ci.yml"
+
+
+@app.command()
+def init(
+    root: Path = typer.Option(Path("."), "--root", help="Project root directory."),
+    fail_on: str = typer.Option(
+        "error", "--fail-on", help="fail-on level written into the generated workflow."
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing workflow."),
+) -> None:
+    """Generate a GitHub Actions CI workflow for this vocabulary project."""
+    from importlib.metadata import version as pkg_version
+
+    console = Console(file=sys.stdout, highlight=False)
+    workflow_path = root / _WORKFLOW_FILE
+
+    if workflow_path.exists() and not force:
+        console.print(f"[yellow]Workflow already exists:[/] {workflow_path}")
+        console.print("Run with [bold]--force[/] to overwrite.")
+        raise typer.Exit(0)
+
+    action_version = f"v{pkg_version('semanticlint')}"
+    workflow_path.parent.mkdir(parents=True, exist_ok=True)
+    workflow_path.write_text(
+        _WORKFLOW_TEMPLATE.format(fail_on=fail_on, action_version=action_version)
+    )
+    console.print(f"[bold green]Created:[/] {workflow_path}")
+
+
 def main() -> None:
     app()
