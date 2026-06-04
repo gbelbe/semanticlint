@@ -4,7 +4,7 @@ author: gbelbe
 
 inputs:
   path:
-    description: File or directory to check (default: repo root).
+    description: "File or directory to check (default: repo root)."
     required: false
     default: "."
   fail-on:
@@ -16,7 +16,7 @@ inputs:
     required: false
     default: ""
   version:
-    description: semanticlint version to install (default: latest).
+    description: "semanticlint version to install (default: latest)."
     required: false
     default: ""
 
