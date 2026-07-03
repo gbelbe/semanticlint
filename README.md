@@ -27,6 +27,47 @@
 - **Extensible**: add custom checks with a single class and `@CheckRegistry.register`
 - **Configurable**: `onto-ci.yml` alongside your vocabulary files controls which stages run
 
+## Why semanticlint, and how it relates to SHACL / pySHACL
+
+**Decision: semanticlint is the aggregation layer; [pySHACL](https://github.com/RDFLib/pySHACL) is
+the SHACL engine underneath it.** Shape-based, per-node constraints (a class must have an
+`rdfs:label`, a property must declare `rdfs:domain`/`rdfs:range`, SKOS label disjointness, …) are
+expressed as SHACL shapes and validated through pySHACL — the W3C-standard, reusable way to do it.
+semanticlint does **not** reimplement what SHACL already does well.
+
+**Objective: aggregate, under one tool and one report, the validations and metrics that SHACL
+_cannot_ express on its own.** SHACL validates one node against a shape and answers *pass / fail per
+node*. It is not designed for **statistical, graph-wide or hierarchy-scoped quality** — questions like:
+
+- *What fraction of classes carry a label?* (coverage metrics, not per-node constraints)
+- *What is the label/definition coverage of the `Animal` **subtree**, and does it meet a threshold that
+  varies by hierarchy level* (1st-order class, 2nd-order class, …)?
+- Rolling many heterogeneous signals — SHACL shape results, aggregate metrics, and imperative
+  Python checks — into a single severity-graded report with `fail-on` gating for CI.
+
+This limitation of SHACL for aggregate data-quality assessment is documented in the literature —
+see *“Is SHACL Suitable for Data Quality Assessment?”* (arXiv, 2025):
+<https://arxiv.org/html/2507.22305v2>. semanticlint exists to cover precisely that gap: it runs SHACL
+where SHACL fits, and adds coverage metrics, hierarchy-scoped aggregation with per-level thresholds,
+auto vocabulary detection, curated rule sets, and unified reporting on top.
+
+### Scope of the two tools
+
+| Capability | pySHACL (SHACL engine) | semanticlint (aggregation layer) |
+|---|:---:|:---:|
+| Per-node shape constraints (`sh:minCount`, domain/range, datatypes, disjointness) | ✅ | ✅ *(via pySHACL)* |
+| Severity per result (`sh:Violation`/`Warning`/`Info`) | ✅ | ✅ |
+| **Aggregate coverage metrics** (e.g. *% of classes labelled*) | ❌ | ✅ |
+| **Hierarchy-scoped metrics** (per class/subtree) with **per-level thresholds** | ❌ | ✅ |
+| Imperative / custom Python checks alongside shapes | ❌ | ✅ |
+| Auto-detect SKOS / OWL / RDFS / RDF and select applicable checks | ❌ | ✅ |
+| Curated, ready-made OWL / SKOS / RDFS / URI rule sets | ❌ *(you author every shape)* | ✅ |
+| Unified report + `fail-on` gating for CI across all of the above | ❌ | ✅ |
+
+**Rule of thumb:** if a rule is a per-node constraint, write it as a SHACL shape (pySHACL runs it). If
+it is an aggregate, a hierarchy-scoped metric, or needs to sit in one graded report with everything
+else, that is what semanticlint adds.
+
 ## Installation
 
 ```bash
