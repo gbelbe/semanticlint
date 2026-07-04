@@ -53,6 +53,30 @@ def skos_concept_no_label() -> Graph:
     return g
 
 
+@given("an OWL graph with an individual typed only owl:NamedIndividual", target_fixture="graph")
+def owl_untyped_individual() -> Graph:
+    g = _owl_graph()
+    g.add((EX.i, RDF.type, OWL.NamedIndividual))
+    return g
+
+
+@given("an OWL graph with a subclass of an undeclared class", target_fixture="graph")
+def owl_undeclared_super() -> Graph:
+    g = _owl_graph()
+    g.add((EX.Child, RDF.type, OWL.Class))
+    g.add((EX.Child, RDFS.subClassOf, EX.Undeclared))
+    return g
+
+
+@given("a SKOS graph with a concept labelled only in English", target_fixture="graph")
+def skos_concept_en_only() -> Graph:
+    g = Graph()
+    g.add((EX.Scheme, RDF.type, SKOS.ConceptScheme))
+    g.add((EX.c1, RDF.type, SKOS.Concept))
+    g.add((EX.c1, SKOS.prefLabel, Literal("One", lang="en")))
+    return g
+
+
 @given("a fully specified OWL graph", target_fixture="graph")
 def owl_fully_specified() -> Graph:
     g = _owl_graph()
@@ -75,3 +99,12 @@ def run_shacl(graph: Graph) -> list:
 @when(parsers.parse('I run the pipeline ignoring "{check_id}"'), target_fixture="violations")
 def run_pipeline_ignoring(graph: Graph, check_id: str) -> list:
     return check_graph(graph, CheckConfig(ignore=[check_id]))
+
+
+@when(
+    parsers.parse('I run the SHACL shapes requiring languages "{langs}"'),
+    target_fixture="violations",
+)
+def run_shacl_languages(graph: Graph, langs: str) -> list:
+    languages = [tag.strip() for tag in langs.split(",")]
+    return run_shapes(graph, CheckConfig(quality={"languages": languages}))

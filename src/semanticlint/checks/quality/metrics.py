@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from rdflib import RDF, Graph, Literal
+from rdflib import RDF, Graph
 from rdflib.namespace import OWL, RDFS, SKOS
 
 from semanticlint.checks.base import Check, CheckConfig, Severity, Violation, VocabType
@@ -76,33 +76,8 @@ class DefinitionCoverageCheck(Check):
         return []
 
 
-@CheckRegistry.register
-class LanguageCoverageCheck(Check):
-    id = "QUA003"
-    description = "Every skos:Concept should have a skos:prefLabel in each required language"
-    severity = Severity.WARNING
-    applies_to = VocabType.SKOS
-
-    def run(self, graph: Graph, config: CheckConfig) -> list[Violation]:
-        languages: list[str] = config.quality.get("languages", ["en"])
-        violations = []
-        for concept in _concepts(graph):
-            langs_present = {
-                str(o.language)  # type: ignore[union-attr]
-                for o in graph.objects(concept, SKOS.prefLabel)
-                if isinstance(o, Literal) and o.language
-            }
-            for lang in languages:
-                if lang not in langs_present:
-                    violations.append(
-                        Violation(
-                            self.id,
-                            f"Concept missing prefLabel in language '{lang}'",
-                            self.severity,
-                            subject=concept,  # type: ignore[arg-type]
-                        )
-                    )
-        return violations
+# QUA003 (prefLabel in each required language) is now a config-driven SHACL shape
+# (generated per language in semanticlint/shacl/builder.py), run via pySHACL.
 
 
 @CheckRegistry.register

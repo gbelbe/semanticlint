@@ -81,3 +81,65 @@ def test_clean_skos_graph_yields_no_violations():
 
 def test_empty_graph_yields_no_violations():
     assert run_shapes(Graph(), CheckConfig()) == []
+
+
+# ── OWL003 — untyped individual (qualified value shape) ───────────────────────
+
+
+def test_owl003_untyped_individual_is_flagged():
+    g = _owl((EX.i, RDF.type, OWL.NamedIndividual))  # only NamedIndividual
+    v = [x for x in run_shapes(g, CheckConfig()) if x.check_id == "OWL003"]
+    assert v and v[0].subject == EX.i
+
+
+def test_owl003_individual_with_a_real_type_passes():
+    g = _owl((EX.i, RDF.type, OWL.NamedIndividual), (EX.i, RDF.type, EX.Person))
+    assert not [x for x in run_shapes(g, CheckConfig()) if x.check_id == "OWL003"]
+
+
+# ── RDS002 — undeclared superclass (value shape; URI in the message) ──────────
+
+
+def test_rds002_undeclared_superclass_flagged_with_uri_in_message():
+    g = _owl((EX.Child, RDF.type, OWL.Class), (EX.Child, RDFS.subClassOf, EX.Undeclared))
+    v = [x for x in run_shapes(g, CheckConfig()) if x.check_id == "RDS002"]
+    assert v and v[0].subject == EX.Child
+    assert str(EX.Undeclared) in v[0].message  # the offending class URI is appended
+
+
+def test_rds002_declared_and_foundational_superclasses_pass():
+    g = _owl(
+        (EX.A, RDF.type, OWL.Class),
+        (EX.B, RDF.type, OWL.Class),
+        (EX.A, RDFS.subClassOf, EX.B),  # declared parent
+        (EX.A, RDFS.subClassOf, OWL.Thing),  # foundational
+    )
+    assert not [x for x in run_shapes(g, CheckConfig()) if x.check_id == "RDS002"]
+
+
+# ── QUA003 — config-driven language coverage ──────────────────────────────────
+
+
+def _concept(*prefs) -> Graph:
+    g = Graph()
+    g.add((EX.Scheme, RDF.type, SKOS.ConceptScheme))
+    g.add((EX.c1, RDF.type, SKOS.Concept))
+    for text, lang in prefs:
+        g.add((EX.c1, SKOS.prefLabel, Literal(text, lang=lang)))
+    return g
+
+
+def test_qua003_missing_required_language_flagged():
+    g = _concept(("Un", "fr"))  # only French, English required by default
+    assert any(v.check_id == "QUA003" for v in run_shapes(g, CheckConfig()))
+
+
+def test_qua003_all_required_languages_present_passes():
+    g = _concept(("One", "en"))
+    assert not [v for v in run_shapes(g, CheckConfig()) if v.check_id == "QUA003"]
+
+
+def test_qua003_respects_configured_languages():
+    g = _concept(("One", "en"))  # English present, but French now required
+    v = run_shapes(g, CheckConfig(quality={"languages": ["fr"]}))
+    assert any(x.check_id == "QUA003" for x in v)

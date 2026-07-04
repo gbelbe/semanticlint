@@ -21,6 +21,7 @@ from rdflib.term import Node
 
 from semanticlint.checks.base import CheckConfig, Severity, Violation, VocabType
 from semanticlint.detect import detect_vocab_type
+from semanticlint.shacl.builder import build_config_shapes
 
 SLINT = Namespace("https://semanticlint.org/ns#")
 
@@ -81,7 +82,9 @@ def run_shapes(
     """
     if vtype is None:
         vtype = detect_vocab_type(graph)
-    shapes = _shapes()
+    shapes = Graph()
+    shapes += _shapes()  # built-in static shapes (cached; copied, not mutated)
+    shapes += build_config_shapes(config)  # config-driven shapes (e.g. QUA003 languages)
     _, results, _ = validate(graph, shacl_graph=shapes, inference="none")
 
     violations: list[Violation] = []
@@ -97,9 +100,21 @@ def run_shapes(
         violations.append(
             Violation(
                 str(check_id),
-                str(results.value(result, SH.resultMessage) or ""),
+                _message(results, result),
                 severity,
-                subject=results.value(result, SH.focusNode),  # type: ignore[arg-type]
+                subject=_focus(results, result),  # type: ignore[arg-type]
             )
         )
     return violations
+
+
+def _focus(results: Graph, result: Node) -> Node | None:
+    return results.value(result, SH.focusNode)
+
+
+def _message(results: Graph, result: Node) -> str:
+    """The result message, with the offending value appended when the result carries one
+    (``sh:value``) — e.g. RDS002's undeclared class URI, matching the legacy wording."""
+    message = str(results.value(result, SH.resultMessage) or "")
+    offending = results.value(result, SH.value)
+    return f"{message} <{offending}>" if offending is not None else message

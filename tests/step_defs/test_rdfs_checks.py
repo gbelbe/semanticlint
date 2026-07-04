@@ -5,7 +5,6 @@ from rdflib import RDF, Graph, Literal, Namespace
 from rdflib.namespace import OWL, RDFS
 
 from semanticlint.checks.base import CheckConfig, VocabType
-from semanticlint.checks.rdfs.classes import UndeclaredSuperclassCheck
 from semanticlint.shacl.runner import run_shapes
 
 scenarios("../features/rdfs/class_label_integrity.feature")
@@ -14,11 +13,8 @@ EX = Namespace("http://example.org/")
 
 
 def _run_rdfs_checks(graph: Graph) -> list:
-    """The RDFS/OWL class domain checks: RDS001 via SHACL shape + RDS002 (Python)."""
-    config = CheckConfig()
-    violations = run_shapes(graph, config, VocabType.RDFS | VocabType.OWL)
-    violations.extend(UndeclaredSuperclassCheck().run(graph, config))
-    return violations
+    """The RDFS/OWL class domain checks — RDS001 and RDS002 are both SHACL shapes now."""
+    return run_shapes(graph, CheckConfig(), VocabType.RDFS | VocabType.OWL)
 
 
 # ── Givens ────────────────────────────────────────────────────────────────────

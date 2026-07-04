@@ -10,19 +10,20 @@ from semanticlint.checks.quality.metrics import (
     ClassLabelCoverageCheck,
     DefinitionCoverageCheck,
     LabelCoverageCheck,
-    LanguageCoverageCheck,
     PropertyLabelCoverageCheck,
 )
+from semanticlint.shacl.runner import run_shapes
 
 scenarios("../features/quality/skos_quality.feature")
 scenarios("../features/quality/owl_quality.feature")
 
 EX = Namespace("http://example.org/")
 
+# QUA003 (language coverage) is now a config-driven SHACL shape; the rest are still
+# Python aggregate metrics (Phase D territory).
 _QUALITY_CHECKS = [
     LabelCoverageCheck,
     DefinitionCoverageCheck,
-    LanguageCoverageCheck,
     ClassLabelCoverageCheck,
     PropertyLabelCoverageCheck,
 ]
@@ -146,4 +147,6 @@ def run_quality_checks(graph: Graph, config: CheckConfig) -> list:
     violations = []
     for cls in _QUALITY_CHECKS:
         violations.extend(cls().run(graph, config))
+    # QUA003 is shape-backed (config-driven) — take only its results from the SHACL pass.
+    violations.extend(v for v in run_shapes(graph, config) if v.check_id == "QUA003")
     return violations

@@ -5,7 +5,6 @@ from rdflib import RDF, Graph, Namespace
 from rdflib.namespace import OWL, RDFS
 
 from semanticlint.checks.base import CheckConfig, VocabType
-from semanticlint.checks.owl.properties import UntypedIndividualCheck
 from semanticlint.shacl.runner import run_shapes
 
 scenarios("../features/owl/property_integrity.feature")
@@ -14,11 +13,8 @@ EX = Namespace("http://example.org/")
 
 
 def _run_owl_checks(graph: Graph) -> list:
-    """The OWL domain checks: OWL001/OWL002 via SHACL shapes + OWL003 (Python)."""
-    config = CheckConfig()
-    violations = run_shapes(graph, config, VocabType.OWL)
-    violations.extend(UntypedIndividualCheck().run(graph, config))
-    return violations
+    """The OWL domain checks — OWL001/OWL002/OWL003 are all SHACL shapes now."""
+    return run_shapes(graph, CheckConfig(), VocabType.OWL)
 
 
 # ── Givens ────────────────────────────────────────────────────────────────────

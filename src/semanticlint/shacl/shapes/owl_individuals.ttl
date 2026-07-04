@@ -1,0 +1,19 @@
+# OWL individual typing — migrated from the hand-written OWL003 check.
+# "A NamedIndividual must have at least one rdf:type beyond owl:NamedIndividual":
+# count rdf:type values that are NOT owl:NamedIndividual, require at least one.
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix slint: <https://semanticlint.org/ns#> .
+
+slint:OWL003 a sh:NodeShape ;
+    slint:checkId "OWL003" ;
+    slint:appliesTo "OWL" ;
+    sh:targetClass owl:NamedIndividual ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:qualifiedValueShape [ sh:not [ sh:in ( owl:NamedIndividual ) ] ] ;
+        sh:qualifiedMinCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "NamedIndividual has no domain class type beyond owl:NamedIndividual" ;
+    ] .

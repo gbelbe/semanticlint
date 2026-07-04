@@ -34,3 +34,18 @@ Feature: SHACL-backed shape validation
     Given an OWL graph with a property missing rdfs:domain
     When I run the pipeline ignoring "OWL001"
     Then there is no violation with id "OWL001"
+
+  Scenario: An individual typed only owl:NamedIndividual is reported as OWL003
+    Given an OWL graph with an individual typed only owl:NamedIndividual
+    When I run the SHACL shapes
+    Then there is a violation with id "OWL003"
+
+  Scenario: A subclass of an undeclared class is reported as RDS002
+    Given an OWL graph with a subclass of an undeclared class
+    When I run the SHACL shapes
+    Then there is a violation with id "RDS002"
+
+  Scenario: A concept missing a required language is reported as QUA003
+    Given a SKOS graph with a concept labelled only in English
+    When I run the SHACL shapes requiring languages "en, fr"
+    Then there is a violation with id "QUA003"

@@ -1,0 +1,28 @@
+# RDFS subclass referential integrity — migrated from the hand-written RDS002 check.
+# "rdfs:subClassOf must point to a class declared in the graph (foundational classes
+# such as owl:Thing are exempt)": each subClassOf value must conform to DeclaredClass.
+# The offending value is carried on the result as sh:value and appended to the message
+# by the runner, matching the legacy "… undeclared class <URI>" wording.
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix slint: <https://semanticlint.org/ns#> .
+
+slint:RDS002 a sh:NodeShape ;
+    slint:checkId "RDS002" ;
+    slint:appliesTo "RDFS", "OWL" ;
+    sh:targetSubjectsOf rdfs:subClassOf ;
+    sh:property [
+        sh:path rdfs:subClassOf ;
+        sh:node slint:DeclaredClass ;
+        sh:severity sh:Warning ;
+        sh:message "rdfs:subClassOf references undeclared class" ;
+    ] .
+
+# A "declared class" is one typed owl:Class or rdfs:Class, or a foundational class.
+slint:DeclaredClass a sh:NodeShape ;
+    sh:or (
+        [ sh:class owl:Class ]
+        [ sh:class rdfs:Class ]
+        [ sh:in ( owl:Thing owl:Nothing rdfs:Resource rdfs:Literal ) ]
+    ) .
