@@ -1,97 +1,19 @@
 from __future__ import annotations
 
 from rdflib import RDF, Graph, Namespace
-from rdflib.namespace import OWL, RDFS
+from rdflib.namespace import OWL
 
 from semanticlint.checks.base import CheckConfig, Severity
-from semanticlint.checks.owl.properties import (
-    PropertyDomainCheck,
-    PropertyRangeCheck,
-    UntypedIndividualCheck,
-)
+from semanticlint.checks.owl.properties import UntypedIndividualCheck
+
+# OWL001 (rdfs:domain) and OWL002 (rdfs:range) migrated to SHACL shapes — see
+# tests/unit/test_shacl_runner.py and tests/features/shacl/shacl_validation.feature.
 
 EX = Namespace("http://example.org/")
 
 
 def _run(check_cls, graph):
     return check_cls().run(graph, CheckConfig())
-
-
-# ── OWL001 ────────────────────────────────────────────────────────────────────
-
-
-def test_owl001_no_violation_property_has_domain():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.ObjectProperty))
-    g.add((EX.p, RDFS.domain, EX.Source))
-    assert _run(PropertyDomainCheck, g) == []
-
-
-def test_owl001_violation_object_property_no_domain():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.ObjectProperty))
-    violations = _run(PropertyDomainCheck, g)
-    assert any(v.check_id == "OWL001" for v in violations)
-
-
-def test_owl001_violation_datatype_property_no_domain():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.DatatypeProperty))
-    violations = _run(PropertyDomainCheck, g)
-    assert any(v.check_id == "OWL001" for v in violations)
-
-
-def test_owl001_violation_subject_is_property_uri():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.ObjectProperty))
-    violations = _run(PropertyDomainCheck, g)
-    assert violations[0].subject == EX.p
-
-
-def test_owl001_severity_is_warning():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.ObjectProperty))
-    violations = _run(PropertyDomainCheck, g)
-    assert violations[0].severity == Severity.WARNING
-
-
-def test_owl001_no_violation_empty_graph():
-    assert _run(PropertyDomainCheck, Graph()) == []
-
-
-# ── OWL002 ────────────────────────────────────────────────────────────────────
-
-
-def test_owl002_no_violation_property_has_range():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.ObjectProperty))
-    g.add((EX.p, RDFS.range, EX.Target))
-    assert _run(PropertyRangeCheck, g) == []
-
-
-def test_owl002_violation_object_property_no_range():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.ObjectProperty))
-    violations = _run(PropertyRangeCheck, g)
-    assert any(v.check_id == "OWL002" for v in violations)
-
-
-def test_owl002_violation_datatype_property_no_range():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.DatatypeProperty))
-    violations = _run(PropertyRangeCheck, g)
-    assert any(v.check_id == "OWL002" for v in violations)
-
-
-def test_owl002_violation_subject_is_property_uri():
-    g = Graph()
-    g.add((EX.p, RDF.type, OWL.ObjectProperty))
-    violations = _run(PropertyRangeCheck, g)
-    assert violations[0].subject == EX.p
-
-
-def test_owl002_no_violation_empty_graph():
-    assert _run(PropertyRangeCheck, Graph()) == []
 
 
 # ── OWL003 ────────────────────────────────────────────────────────────────────

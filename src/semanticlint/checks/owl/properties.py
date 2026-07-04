@@ -1,56 +1,14 @@
 from __future__ import annotations
 
 from rdflib import RDF, Graph
-from rdflib.namespace import OWL, RDFS
+from rdflib.namespace import OWL
 
 from semanticlint.checks.base import Check, CheckConfig, Severity, Violation, VocabType
 from semanticlint.checks.registry import CheckRegistry
 
-
-def _properties(graph: Graph) -> set:
-    return set(graph.subjects(RDF.type, OWL.ObjectProperty)) | set(
-        graph.subjects(RDF.type, OWL.DatatypeProperty)
-    )
-
-
-@CheckRegistry.register
-class PropertyDomainCheck(Check):
-    id = "OWL001"
-    description = "Every owl:ObjectProperty and owl:DatatypeProperty should declare rdfs:domain"
-    severity = Severity.WARNING
-    applies_to = VocabType.OWL
-
-    def run(self, graph: Graph, config: CheckConfig) -> list[Violation]:
-        return [
-            Violation(
-                self.id,
-                "Property has no rdfs:domain",
-                self.severity,
-                subject=prop,  # type: ignore[arg-type]
-            )
-            for prop in _properties(graph)
-            if not any(graph.objects(prop, RDFS.domain))
-        ]
-
-
-@CheckRegistry.register
-class PropertyRangeCheck(Check):
-    id = "OWL002"
-    description = "Every owl:ObjectProperty and owl:DatatypeProperty should declare rdfs:range"
-    severity = Severity.WARNING
-    applies_to = VocabType.OWL
-
-    def run(self, graph: Graph, config: CheckConfig) -> list[Violation]:
-        return [
-            Violation(
-                self.id,
-                "Property has no rdfs:range",
-                self.severity,
-                subject=prop,  # type: ignore[arg-type]
-            )
-            for prop in _properties(graph)
-            if not any(graph.objects(prop, RDFS.range))
-        ]
+# OWL001 (rdfs:domain) and OWL002 (rdfs:range) are now expressed as SHACL shapes
+# (semanticlint/shacl/shapes/owl_properties.ttl) and run via pySHACL — see
+# semanticlint.shacl.runner. Only the non-cardinality OWL003 remains hand-written.
 
 
 @CheckRegistry.register

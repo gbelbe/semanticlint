@@ -4,18 +4,22 @@ from pytest_bdd import given, scenarios, when
 from rdflib import RDF, Graph, Literal, Namespace
 from rdflib.namespace import SKOS
 
-from semanticlint.checks.base import CheckConfig
-from semanticlint.checks.skos.labels import (
-    DuplicatePrefLabelCheck,
-    LabelDisjointnessCheck,
-    MissingPrefLabelCheck,
-)
+from semanticlint.checks.base import CheckConfig, VocabType
+from semanticlint.checks.skos.labels import DuplicatePrefLabelCheck, LabelDisjointnessCheck
+from semanticlint.shacl.runner import run_shapes
 
 scenarios("../features/skos/label_integrity.feature")
 
 EX = Namespace("http://example.org/")
 
-_LABEL_CHECKS = [DuplicatePrefLabelCheck, MissingPrefLabelCheck, LabelDisjointnessCheck]
+
+def _run_skos_label_checks(graph: Graph) -> list:
+    """The SKOS label domain checks: SKO002 via SHACL shape + SKO001/SKO003 (Python)."""
+    config = CheckConfig()
+    violations = run_shapes(graph, config, VocabType.SKOS)
+    violations.extend(DuplicatePrefLabelCheck().run(graph, config))
+    violations.extend(LabelDisjointnessCheck().run(graph, config))
+    return violations
 
 
 # ── Givens ────────────────────────────────────────────────────────────────────
@@ -93,8 +97,4 @@ def two_concepts_shared_literal_diff_concepts() -> Graph:
 
 @when("I run the SKOS label checks", target_fixture="violations")
 def run_label_checks(graph: Graph) -> list:
-    config = CheckConfig()
-    violations = []
-    for cls in _LABEL_CHECKS:
-        violations.extend(cls().run(graph, config))
-    return violations
+    return _run_skos_label_checks(graph)

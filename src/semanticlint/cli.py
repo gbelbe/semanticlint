@@ -10,8 +10,7 @@ from rich.console import Console
 import semanticlint  # noqa: F401 — registers all built-in checks
 from semanticlint.checks.base import CheckConfig, Severity
 from semanticlint.checks.lint.syntax import lint_syntax
-from semanticlint.checks.registry import CheckRegistry
-from semanticlint.detect import detect_vocab_type
+from semanticlint.pipeline import check_graph
 
 app = typer.Typer(help="Lint and quality-check RDF, SKOS, OWL and RDFS vocabularies.")
 
@@ -84,9 +83,7 @@ def check(
         file_violations = list(syntax_violations)
 
         if graph is not None and len(graph) > 0:
-            vtype = detect_vocab_type(graph)
-            for check_cls in CheckRegistry.for_vocab(vtype):
-                file_violations.extend(check_cls().run(graph, cfg))
+            file_violations.extend(check_graph(graph, cfg))
 
         if file_violations:
             console.print(f"\n[bold]{file_path}[/]")

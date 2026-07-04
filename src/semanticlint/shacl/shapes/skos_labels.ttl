@@ -1,0 +1,15 @@
+# SKOS label integrity — migrated from the hand-written SKO002 check.
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix slint: <https://semanticlint.org/ns#> .
+
+slint:SKO002 a sh:NodeShape ;
+    slint:checkId "SKO002" ;
+    slint:appliesTo "SKOS" ;
+    sh:targetClass skos:Concept ;
+    sh:property [
+        sh:path skos:prefLabel ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "Concept has no skos:prefLabel" ;
+    ] .

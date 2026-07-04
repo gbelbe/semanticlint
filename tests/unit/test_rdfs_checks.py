@@ -1,77 +1,19 @@
 from __future__ import annotations
 
-from rdflib import RDF, Graph, Literal, Namespace
+from rdflib import RDF, Graph, Namespace
 from rdflib.namespace import OWL, RDFS
 
-from semanticlint.checks.base import CheckConfig, Severity
-from semanticlint.checks.rdfs.classes import ClassLabelCheck, UndeclaredSuperclassCheck
+from semanticlint.checks.base import CheckConfig
+from semanticlint.checks.rdfs.classes import UndeclaredSuperclassCheck
+
+# RDS001 (class needs rdfs:label) migrated to a SHACL shape — see
+# tests/unit/test_shacl_runner.py and tests/features/shacl/shacl_validation.feature.
 
 EX = Namespace("http://example.org/")
 
 
 def _run(check_cls, graph):
     return check_cls().run(graph, CheckConfig())
-
-
-# ── RDS001 ────────────────────────────────────────────────────────────────────
-
-
-def test_rds001_no_violation_class_has_label():
-    g = Graph()
-    g.add((EX.C, RDF.type, OWL.Class))
-    g.add((EX.C, RDFS.label, Literal("My Class", lang="en")))
-    assert _run(ClassLabelCheck, g) == []
-
-
-def test_rds001_violation_owl_class_no_label():
-    g = Graph()
-    g.add((EX.C, RDF.type, OWL.Class))
-    violations = _run(ClassLabelCheck, g)
-    assert any(v.check_id == "RDS001" for v in violations)
-
-
-def test_rds001_violation_rdfs_class_no_label():
-    g = Graph()
-    g.add((EX.C, RDF.type, RDFS.Class))
-    violations = _run(ClassLabelCheck, g)
-    assert any(v.check_id == "RDS001" for v in violations)
-
-
-def test_rds001_violation_subject_is_class_uri():
-    g = Graph()
-    g.add((EX.C, RDF.type, OWL.Class))
-    violations = _run(ClassLabelCheck, g)
-    assert violations[0].subject == EX.C
-
-
-def test_rds001_severity_is_warning():
-    g = Graph()
-    g.add((EX.C, RDF.type, OWL.Class))
-    violations = _run(ClassLabelCheck, g)
-    assert violations[0].severity == Severity.WARNING
-
-
-def test_rds001_no_violation_empty_graph():
-    assert _run(ClassLabelCheck, Graph()) == []
-
-
-def test_rds001_no_violation_multiple_classes_all_labelled():
-    g = Graph()
-    for name, label in [(EX.C1, "Class One"), (EX.C2, "Class Two")]:
-        g.add((name, RDF.type, OWL.Class))
-        g.add((name, RDFS.label, Literal(label, lang="en")))
-    assert _run(ClassLabelCheck, g) == []
-
-
-def test_rds001_violation_only_unlabelled_class_flagged():
-    g = Graph()
-    g.add((EX.C1, RDF.type, OWL.Class))
-    g.add((EX.C1, RDFS.label, Literal("Labelled", lang="en")))
-    g.add((EX.C2, RDF.type, OWL.Class))
-    violations = _run(ClassLabelCheck, g)
-    subjects = [v.subject for v in violations]
-    assert EX.C2 in subjects
-    assert EX.C1 not in subjects
 
 
 # ── RDS002 ────────────────────────────────────────────────────────────────────

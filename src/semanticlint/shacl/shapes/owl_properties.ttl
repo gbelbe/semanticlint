@@ -1,0 +1,29 @@
+# OWL property integrity — migrated from the hand-written OWL001/OWL002 checks.
+# Each NodeShape carries slint:checkId + slint:appliesTo so the runner can map a
+# SHACL validation result back to a semanticlint check id and vocab applicability.
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix slint: <https://semanticlint.org/ns#> .
+
+slint:OWL001 a sh:NodeShape ;
+    slint:checkId "OWL001" ;
+    slint:appliesTo "OWL" ;
+    sh:targetClass owl:ObjectProperty, owl:DatatypeProperty ;
+    sh:property [
+        sh:path rdfs:domain ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "Property has no rdfs:domain" ;
+    ] .
+
+slint:OWL002 a sh:NodeShape ;
+    slint:checkId "OWL002" ;
+    slint:appliesTo "OWL" ;
+    sh:targetClass owl:ObjectProperty, owl:DatatypeProperty ;
+    sh:property [
+        sh:path rdfs:range ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "Property has no rdfs:range" ;
+    ] .
