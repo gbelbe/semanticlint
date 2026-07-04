@@ -15,7 +15,7 @@ from functools import lru_cache
 from importlib import resources
 
 from pyshacl import validate
-from rdflib import RDF, Graph, Namespace
+from rdflib import RDF, Graph, Namespace, URIRef
 from rdflib.namespace import SH
 from rdflib.term import Node
 
@@ -50,56 +50,83 @@ def _shapes() -> Graph:
 
 
 def _annotated_shape(shapes: Graph, source: Node | None) -> Node | None:
-    """The NodeShape carrying ``slint:checkId`` for a result's ``sh:sourceShape``.
+    """The NodeShape a result's ``sh:sourceShape`` belongs to.
 
     A property-constraint result points at the (blank) property shape; its parent
-    NodeShape holds the annotation. A node-level constraint points at the NodeShape
-    itself.
+    NodeShape is returned. A node-level constraint points at the NodeShape itself.
     """
     if source is None:
         return None
-    if (source, SLINT.checkId, None) in shapes:
-        return source
-    return shapes.value(predicate=SH.property, object=source)
+    parent = shapes.value(predicate=SH.property, object=source)
+    return parent if parent is not None else source
 
 
-def _applies_to(shapes: Graph, shape: Node) -> VocabType:
+def _local_name(node: Node) -> str:
+    text = str(node)
+    for sep in ("#", "/"):
+        if sep in text:
+            return text.rsplit(sep, 1)[-1]
+    return text
+
+
+def _check_id(shapes: Graph, shape: Node) -> str:
+    """The check id for *shape*: its ``slint:checkId`` (built-in / opt-in), else the
+    shape's URI local name (local business shapes need no annotation), else ``SHACL``."""
+    declared = shapes.value(shape, SLINT.checkId)
+    if declared is not None:
+        return str(declared)
+    return _local_name(shape) if isinstance(shape, URIRef) else "SHACL"
+
+
+def _shape_applies(shapes: Graph, shape: Node, vtype: VocabType) -> bool:
+    """Whether *shape* fires for the graph's vocabulary. Built-in shapes declare
+    ``slint:appliesTo`` and are gated by it; a shape with no declaration (a local
+    business rule) always applies — its SHACL targets already gate relevance."""
+    declared = list(shapes.objects(shape, SLINT.appliesTo))
+    if not declared:
+        return True
     flags = VocabType(0)
-    for obj in shapes.objects(shape, SLINT.appliesTo):
+    for obj in declared:
         flags |= _VOCAB.get(str(obj), VocabType(0))
-    return flags
+    return bool(flags & vtype)
 
 
 def run_shapes(
-    graph: Graph, config: CheckConfig, vtype: VocabType | None = None
+    graph: Graph,
+    config: CheckConfig,
+    vtype: VocabType | None = None,
+    extra_shapes: Graph | None = None,
 ) -> list[Violation]:
-    """Validate *graph* against the built-in SHACL shapes and return Violations.
+    """Validate *graph* against the built-in shapes plus any *extra_shapes* (discovered
+    local business rules), returning Violations.
 
-    Only shapes whose ``slint:appliesTo`` overlaps the graph's detected vocabulary
-    type fire — mirroring the ``for_vocab`` gating of the Python checks. ``config`` is
-    accepted for parity with the check interface (select/ignore are applied by the
-    caller / pipeline).
+    Built-in shapes are vocab-gated by ``slint:appliesTo``; local shapes apply always
+    (targets gate them) and take their id from ``slint:checkId`` or their shape name.
+    ``config`` supplies config-driven shapes (e.g. QUA003 languages); select/ignore are
+    applied by the caller / pipeline.
     """
     if vtype is None:
         vtype = detect_vocab_type(graph)
     shapes = Graph()
     shapes += _shapes()  # built-in static shapes (cached; copied, not mutated)
     shapes += build_config_shapes(config)  # config-driven shapes (e.g. QUA003 languages)
+    if extra_shapes is not None:
+        shapes += extra_shapes  # discovered local *.shapes.ttl business rules
     _, results, _ = validate(graph, shacl_graph=shapes, inference="none")
 
+    nested = set(results.objects(None, SH.detail))  # sub-results of sh:node etc. — skip
     violations: list[Violation] = []
     for result in results.subjects(RDF.type, SH.ValidationResult):
-        shape = _annotated_shape(shapes, results.value(result, SH.sourceShape))
-        if shape is None:
+        if result in nested:
             continue
-        check_id = shapes.value(shape, SLINT.checkId)
-        if check_id is None or not (_applies_to(shapes, shape) & vtype):
+        shape = _annotated_shape(shapes, results.value(result, SH.sourceShape))
+        if shape is None or not _shape_applies(shapes, shape, vtype):
             continue
         sev_node = results.value(result, SH.resultSeverity)
         severity = _SEVERITY.get(sev_node, Severity.WARNING) if sev_node else Severity.WARNING
         violations.append(
             Violation(
-                str(check_id),
+                _check_id(shapes, shape),
                 _message(results, result),
                 severity,
                 subject=_focus(results, result),  # type: ignore[arg-type]

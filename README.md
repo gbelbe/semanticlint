@@ -81,6 +81,47 @@ semanticlint check my-taxonomy.ttl
 semanticlint check vocabularies/ --select SKO --ignore SKO003
 ```
 
+## Project-specific rules (`*.shapes.ttl`)
+
+Rules that are specific to **your** ontology — business constraints the built-in checks can't know
+about — live in a plain SHACL file committed **next to the vocabulary it constrains**. semanticlint
+**auto-discovers** any `*.shapes.ttl` file (a sibling when you check a single file, the whole tree
+when you check a directory), unions it with the built-in shapes, and enforces it. No configuration,
+no registration.
+
+Say `zoo.ttl` defines a zoo ontology. Drop a `zoo.shapes.ttl` beside it:
+
+```turtle
+# zoo.shapes.ttl — versioned in git next to zoo.ttl
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/zoo#> .
+
+ex:PersonEmploymentShape a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [ sh:path ex:work_for ;
+                  sh:class ex:Department ;
+                  sh:maxCount 1 ;
+                  sh:message "A Person may work_for at most one Department" ] .
+```
+
+```bash
+semanticlint check zoo/
+#   ERROR   [PersonEmploymentShape] alice: A Person may work_for at most one Department
+# 1 violation: 1 error  (fail-on: error)   → exit code 1, CI fails
+```
+
+Notes:
+
+- **No annotations needed.** The violation's id defaults to the shape's name
+  (`PersonEmploymentShape`); set a custom one with `slint:checkId "ZOO001"` if you want it stable for
+  `--select`/`--ignore`.
+- **Severity & CI gating.** A plain shape reports at SHACL's default `sh:Violation` → **error**, so it
+  fails CI under the default `--fail-on error`. Use `sh:severity sh:Warning`/`sh:Info` to soften it.
+- **Shapes files are never linted as data** — a `*.shapes.ttl` is treated as rules, not as a
+  vocabulary to check.
+- **Targets do the gating**, so a local shape only fires on the nodes it targets — it's safe to keep
+  shared shapes for several vocabularies in one directory.
+
 ## Writing a custom check
 
 ```python

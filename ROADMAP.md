@@ -44,6 +44,14 @@ The configuration architecture in `docs/architecture/layered-rules.md`. Turns th
 existing shapes + thresholds into a **3-layer, keyed-merge** system and adds
 ontology-specific local rules.
 
+**Phase C.0 — local shape discovery (lean slice) ✅ done.** Auto-discover
+`*.shapes.ttl` next to the ontology and union it into validation: business rules
+are enforced and gate CI with zero wiring, keyed by `slint:checkId` or the shape
+name; shapes files are excluded from data. Ships ahead of the full layered config
+so business rules are usable now. The remaining bullets (global layer, keyed
+override/merge, provenance command) are deferred until overrides are actually
+needed.
+
 - **Layers**: defaults → `~/.config/semanticlint/config.yml` (global) → local
   (`onto-ci.yml` + shapes files versioned with the ontology); most-local wins.
 - **Discovery (both)**: convention (`*.shapes.ttl` sibling / `.semanticlint/`) +
@@ -57,9 +65,13 @@ ontology-specific local rules.
 - **Provenance**: `semanticlint config --resolved <path>` prints the effective rule
   set and each rule's origin layer (à la `git config --show-origin`).
 
-## Phase D — quality gates & the metrics engine
+## Phase D — quality gates & the metrics engine (deferred)
 
 The aggregate/statistical quality SHACL cannot do — the "≥ 50% of labels" gates.
+**Deferred by choice:** the four aggregate coverage gates (QUA001/002/004/005)
+already work today as simple whole-graph Python checks, which is enough to "start
+simple." This phase (per-subtree scope + per-level thresholds) is a non-breaking
+enhancement to add if/when those richer metrics are wanted; nothing depends on it.
 
 - `semanticlint/metrics.py` — `MetricSpec` / `MetricResult` / `evaluate_metrics`;
   the coverage checks (concept label, definition, class label, property label)

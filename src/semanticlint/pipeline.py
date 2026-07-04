@@ -26,11 +26,14 @@ def check_included(check_id: str, config: CheckConfig) -> bool:
     return True
 
 
-def check_graph(graph: Graph, config: CheckConfig) -> list[Violation]:
-    """Every violation for *graph*: SHACL-backed shapes + registered Python checks,
-    gated to the detected vocabulary type and filtered by select/ignore."""
+def check_graph(
+    graph: Graph, config: CheckConfig, extra_shapes: Graph | None = None
+) -> list[Violation]:
+    """Every violation for *graph*: SHACL-backed shapes (built-in + discovered local
+    *extra_shapes*) + registered Python checks, gated to the detected vocabulary type
+    and filtered by select/ignore."""
     vtype = detect_vocab_type(graph)
-    violations = run_shapes(graph, config, vtype)
+    violations = run_shapes(graph, config, vtype, extra_shapes=extra_shapes)
     for check_cls in CheckRegistry.for_vocab(vtype):
         violations.extend(check_cls().run(graph, config))
     return [v for v in violations if check_included(v.check_id, config)]
