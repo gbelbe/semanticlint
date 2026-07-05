@@ -10,8 +10,8 @@ from rich.console import Console
 import semanticlint  # noqa: F401 — registers all built-in checks
 from semanticlint.checks.base import CheckConfig, Severity
 from semanticlint.checks.lint.syntax import lint_syntax
-from semanticlint.checks.registry import CheckRegistry
-from semanticlint.detect import detect_vocab_type
+from semanticlint.pipeline import check_graph
+from semanticlint.shacl.discovery import discover_shapes_files, is_shapes_file, load_shapes
 
 app = typer.Typer(help="Lint and quality-check RDF, SKOS, OWL and RDFS vocabularies.")
 
@@ -27,9 +27,12 @@ _RDF_EXTENSIONS = {".ttl", ".rdf", ".owl", ".n3", ".nt", ".jsonld", ".json"}
 
 
 def _collect_files(path: Path) -> list[Path]:
+    """The data files to validate — local ``*.shapes.ttl`` files are shapes, not data."""
     if path.is_file():
         return [path]
-    return sorted(p for p in path.rglob("*") if p.suffix.lower() in _RDF_EXTENSIONS)
+    return sorted(
+        p for p in path.rglob("*") if p.suffix.lower() in _RDF_EXTENSIONS and not is_shapes_file(p)
+    )
 
 
 def _load_config(config_path: Path | None, search_dir: Path) -> CheckConfig:
@@ -72,6 +75,7 @@ def check(
     search_dir = path.parent if path.is_file() else path
     cfg = _load_config(config, search_dir)
     files = _collect_files(path)
+    local_shapes = load_shapes(discover_shapes_files(path))  # project-owned *.shapes.ttl
 
     if not files:
         console.print(f"[yellow]No RDF files found in {path}[/]")
@@ -84,9 +88,7 @@ def check(
         file_violations = list(syntax_violations)
 
         if graph is not None and len(graph) > 0:
-            vtype = detect_vocab_type(graph)
-            for check_cls in CheckRegistry.for_vocab(vtype):
-                file_violations.extend(check_cls().run(graph, cfg))
+            file_violations.extend(check_graph(graph, cfg, extra_shapes=local_shapes))
 
         if file_violations:
             console.print(f"\n[bold]{file_path}[/]")

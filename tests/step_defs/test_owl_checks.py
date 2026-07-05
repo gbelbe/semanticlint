@@ -4,18 +4,17 @@ from pytest_bdd import given, scenarios, when
 from rdflib import RDF, Graph, Namespace
 from rdflib.namespace import OWL, RDFS
 
-from semanticlint.checks.base import CheckConfig
-from semanticlint.checks.owl.properties import (
-    PropertyDomainCheck,
-    PropertyRangeCheck,
-    UntypedIndividualCheck,
-)
+from semanticlint.checks.base import CheckConfig, VocabType
+from semanticlint.shacl.runner import run_shapes
 
 scenarios("../features/owl/property_integrity.feature")
 
 EX = Namespace("http://example.org/")
 
-_OWL_CHECKS = [PropertyDomainCheck, PropertyRangeCheck, UntypedIndividualCheck]
+
+def _run_owl_checks(graph: Graph) -> list:
+    """The OWL domain checks — OWL001/OWL002/OWL003 are all SHACL shapes now."""
+    return run_shapes(graph, CheckConfig(), VocabType.OWL)
 
 
 # ── Givens ────────────────────────────────────────────────────────────────────
@@ -75,8 +74,4 @@ def individual_no_type() -> Graph:
 
 @when("I run the OWL checks", target_fixture="violations")
 def run_owl_checks(graph: Graph) -> list:
-    config = CheckConfig()
-    violations = []
-    for cls in _OWL_CHECKS:
-        violations.extend(cls().run(graph, config))
-    return violations
+    return _run_owl_checks(graph)

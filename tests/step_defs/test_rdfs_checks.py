@@ -4,14 +4,17 @@ from pytest_bdd import given, scenarios, when
 from rdflib import RDF, Graph, Literal, Namespace
 from rdflib.namespace import OWL, RDFS
 
-from semanticlint.checks.base import CheckConfig
-from semanticlint.checks.rdfs.classes import ClassLabelCheck, UndeclaredSuperclassCheck
+from semanticlint.checks.base import CheckConfig, VocabType
+from semanticlint.shacl.runner import run_shapes
 
 scenarios("../features/rdfs/class_label_integrity.feature")
 
 EX = Namespace("http://example.org/")
 
-_RDFS_CHECKS = [ClassLabelCheck, UndeclaredSuperclassCheck]
+
+def _run_rdfs_checks(graph: Graph) -> list:
+    """The RDFS/OWL class domain checks — RDS001 and RDS002 are both SHACL shapes now."""
+    return run_shapes(graph, CheckConfig(), VocabType.RDFS | VocabType.OWL)
 
 
 # ── Givens ────────────────────────────────────────────────────────────────────
@@ -62,8 +65,4 @@ def subclass_of_undeclared() -> Graph:
 
 @when("I run the RDFS checks", target_fixture="violations")
 def run_rdfs_checks(graph: Graph) -> list:
-    config = CheckConfig()
-    violations = []
-    for cls in _RDFS_CHECKS:
-        violations.extend(cls().run(graph, config))
-    return violations
+    return _run_rdfs_checks(graph)

@@ -8,9 +8,11 @@ from semanticlint.checks.quality.metrics import (
     ClassLabelCoverageCheck,
     DefinitionCoverageCheck,
     LabelCoverageCheck,
-    LanguageCoverageCheck,
     PropertyLabelCoverageCheck,
 )
+
+# QUA003 (language coverage) migrated to a config-driven SHACL shape — covered by
+# tests/unit/test_shacl_builder.py and tests/unit/test_shacl_runner.py.
 
 EX = Namespace("http://example.org/")
 
@@ -90,51 +92,6 @@ def test_definition_coverage_severity():
     g.add((EX.C1, RDF.type, SKOS.Concept))
     violations = _run(DefinitionCoverageCheck, g)
     assert violations[0].severity == Severity.INFO
-
-
-# ── QUA003 — Language coverage ────────────────────────────────────────────────
-
-
-def test_language_coverage_all_en():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    g.add((EX.C1, SKOS.prefLabel, Literal("One", lang="en")))
-    assert _run(LanguageCoverageCheck, g) == []
-
-
-def test_language_coverage_missing_en():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    g.add((EX.C1, SKOS.prefLabel, Literal("Un", lang="fr")))  # no English
-    violations = _run(LanguageCoverageCheck, g)
-    assert any(v.check_id == "QUA003" for v in violations)
-
-
-def test_language_coverage_missing_fr():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    g.add((EX.C1, SKOS.prefLabel, Literal("One", lang="en")))
-    violations = _run(LanguageCoverageCheck, g, languages=["fr"])
-    assert any(v.check_id == "QUA003" for v in violations)
-
-
-def test_language_coverage_subject_is_concept():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    violations = _run(LanguageCoverageCheck, g)
-    assert violations[0].subject == EX.C1
-
-
-def test_language_coverage_empty_graph():
-    assert _run(LanguageCoverageCheck, Graph()) == []
-
-
-def test_language_coverage_multiple_langs_both_present():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    g.add((EX.C1, SKOS.prefLabel, Literal("One", lang="en")))
-    g.add((EX.C1, SKOS.prefLabel, Literal("Un", lang="fr")))
-    assert _run(LanguageCoverageCheck, g, languages=["en", "fr"]) == []
 
 
 # ── QUA004 — Class label coverage ────────────────────────────────────────────

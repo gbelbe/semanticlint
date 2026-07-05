@@ -38,26 +38,11 @@ class DuplicatePrefLabelCheck(Check):
         return violations
 
 
-@CheckRegistry.register
-class MissingPrefLabelCheck(Check):
-    id = "SKO002"
-    description = "Every skos:Concept should have at least one skos:prefLabel"
-    severity = Severity.WARNING
-    applies_to = VocabType.SKOS
-
-    def run(self, graph: Graph, config: CheckConfig) -> list[Violation]:
-        violations = []
-        for concept in graph.subjects(RDF.type, SKOS.Concept):
-            if not any(graph.objects(concept, SKOS.prefLabel)):
-                violations.append(
-                    Violation(
-                        self.id,
-                        "Concept has no skos:prefLabel",
-                        self.severity,
-                        subject=concept,  # type: ignore[arg-type]
-                    )
-                )
-        return violations
+# SKO002 (every concept needs a skos:prefLabel) is now a SHACL shape
+# (semanticlint/shacl/shapes/skos_labels.ttl), run via pySHACL — see
+# semanticlint.shacl.runner. SKO001 (per-language duplicates) and SKO003
+# (cross-property disjointness) stay hand-written — they need grouping/set logic
+# that plain SHACL cardinality cannot express.
 
 
 @CheckRegistry.register

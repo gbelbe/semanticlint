@@ -4,11 +4,10 @@ from rdflib import RDF, Graph, Literal, Namespace
 from rdflib.namespace import SKOS
 
 from semanticlint.checks.base import CheckConfig, Severity
-from semanticlint.checks.skos.labels import (
-    DuplicatePrefLabelCheck,
-    LabelDisjointnessCheck,
-    MissingPrefLabelCheck,
-)
+from semanticlint.checks.skos.labels import DuplicatePrefLabelCheck, LabelDisjointnessCheck
+
+# SKO002 (concept needs skos:prefLabel) migrated to a SHACL shape — see
+# tests/unit/test_shacl_runner.py and tests/features/shacl/shacl_validation.feature.
 
 EX = Namespace("http://example.org/")
 
@@ -64,49 +63,6 @@ def test_sko001_violation_severity_is_error():
     g.add((EX.C1, SKOS.prefLabel, Literal("Uno", lang="en")))
     violations = _run(DuplicatePrefLabelCheck, g)
     assert violations[0].severity == Severity.ERROR
-
-
-# ── SKO002 ────────────────────────────────────────────────────────────────────
-
-
-def test_sko002_no_violation_has_preflabel():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    g.add((EX.C1, SKOS.prefLabel, Literal("One", lang="en")))
-    assert _run(MissingPrefLabelCheck, g) == []
-
-
-def test_sko002_violation_no_label_at_all():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    violations = _run(MissingPrefLabelCheck, g)
-    assert any(v.check_id == "SKO002" for v in violations)
-
-
-def test_sko002_violation_only_alt_label():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    g.add((EX.C1, SKOS.altLabel, Literal("Alternate", lang="en")))
-    violations = _run(MissingPrefLabelCheck, g)
-    assert any(v.check_id == "SKO002" for v in violations)
-
-
-def test_sko002_violation_subject_is_concept_uri():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    violations = _run(MissingPrefLabelCheck, g)
-    assert violations[0].subject == EX.C1
-
-
-def test_sko002_no_violation_empty_graph():
-    assert _run(MissingPrefLabelCheck, Graph()) == []
-
-
-def test_sko002_severity_is_warning():
-    g = Graph()
-    g.add((EX.C1, RDF.type, SKOS.Concept))
-    violations = _run(MissingPrefLabelCheck, g)
-    assert violations[0].severity == Severity.WARNING
 
 
 # ── SKO003 ────────────────────────────────────────────────────────────────────
