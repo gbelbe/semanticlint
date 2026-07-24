@@ -20,6 +20,11 @@ Feature: URI format integrity
     When I run the URI format checks
     Then there is a violation with id "RDF003"
 
+  Scenario: A concept URI with a whole URL pasted into its fragment produces RDF003
+    Given a SKOS concept whose URI has more than one hash fragment
+    When I run the URI format checks
+    Then there is a violation with id "RDF003"
+
   # ── RDF004: non-HTTP/HTTPS scheme ──────────────────────────────────────────
 
   Scenario: A concept with an HTTP URI does not produce RDF004
@@ -80,3 +85,30 @@ Feature: URI format integrity
     Given a concept scheme and a class from the OWL namespace typed in the graph
     When I run the URI format checks
     Then there is no violation with id "RDF006"
+
+  # ── RDF007: duplicate entity URI ───────────────────────────────────────────
+
+  Scenario: A single-typed URI produces no RDF007
+    Given a URI declared only as a SKOS concept
+    When I run the URI format checks
+    Then there is no violation with id "RDF007"
+
+  Scenario: A concept+class pun is accepted and produces no RDF007
+    Given a URI declared as both a SKOS concept and an OWL class
+    When I run the URI format checks
+    Then there is no violation with id "RDF007"
+
+  Scenario: A class+individual pun is accepted and produces no RDF007
+    Given a URI declared as both an OWL class and an OWL named individual
+    When I run the URI format checks
+    Then there is no violation with id "RDF007"
+
+  Scenario: A URI used as both a concept and a property produces RDF007
+    Given a URI declared as both a SKOS concept and an OWL object property
+    When I run the URI format checks
+    Then there is a violation with id "RDF007"
+
+  Scenario: A URI declared as three entity types produces RDF007
+    Given a URI declared as a concept, a class and an individual
+    When I run the URI format checks
+    Then there is a violation with id "RDF007"

@@ -12,6 +12,25 @@ from semanticlint.checks.registry import CheckRegistry
 
 _MALFORMED_CHARS = re.compile(r"[ <>\x00-\x1f\x7f]")
 
+
+def _malformed_reason(uri: str) -> str | None:
+    """Return why a URI is malformed, or ``None`` if it looks well-formed.
+
+    Two independent defects are caught:
+
+    * illegal characters — spaces, angle brackets or control characters that a
+      URI may never contain;
+    * more than one ``#`` — a URI reference has at most one fragment separator
+      (RFC 3986), so a second ``#`` (e.g. a whole URL pasted into the fragment)
+      is structurally invalid.
+    """
+    if _MALFORMED_CHARS.search(uri):
+        return "URI contains illegal characters"
+    if uri.count("#") > 1:
+        return "URI has more than one '#' fragment separator"
+    return None
+
+
 _EXTERNAL_PREFIXES = (
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
     "http://www.w3.org/2000/01/rdf-schema#",
@@ -67,7 +86,10 @@ def _matches_base(entity_uri: str, base: str) -> bool:
 @CheckRegistry.register
 class MalformedURICheck(Check):
     id = "RDF003"
-    description = "URI contains illegal characters (spaces, angle brackets, control characters)"
+    description = (
+        "URI is malformed — illegal characters (spaces, angle brackets, "
+        "control characters) or more than one '#' fragment separator"
+    )
     severity = Severity.ERROR
     applies_to = VocabType.RDF
 
@@ -79,12 +101,12 @@ class MalformedURICheck(Check):
                 if not isinstance(node, URIRef) or node in seen:
                     continue
                 seen.add(node)
-                uri = str(node)
-                if _MALFORMED_CHARS.search(uri):
+                reason = _malformed_reason(str(node))
+                if reason is not None:
                     violations.append(
                         Violation(
                             self.id,
-                            f"URI contains illegal characters: <{uri}>",
+                            f"{reason}: <{node}>",
                             self.severity,
                             subject=node,
                         )
@@ -192,4 +214,55 @@ class BaseURIConsistencyCheck(Check):
                         subject=entity,
                     )
                 )
+        return violations
+
+
+# A URI's declared rdf:type collapsed into an entity "bucket". Property sub-types share one
+# bucket (an Object/Datatype/Annotation-property pun is not cross-entity duplication).
+_ENTITY_TYPE_BUCKETS: dict[URIRef, str] = {
+    SKOS_NS.Concept: "concept",
+    SKOS_NS.ConceptScheme: "scheme",
+    OWL.Class: "class",
+    RDFS.Class: "class",
+    OWL.NamedIndividual: "individual",
+    OWL.ObjectProperty: "property",
+    OWL.DatatypeProperty: "property",
+    OWL.AnnotationProperty: "property",
+    RDF.Property: "property",
+}
+
+# Well-defined puns — the only cases where one URI may carry two entity buckets.
+_ALLOWED_PUNS = frozenset({frozenset({"concept", "class"}), frozenset({"class", "individual"})})
+
+
+@CheckRegistry.register
+class DuplicateEntityURICheck(Check):
+    id = "RDF007"
+    description = (
+        "A URI must identify a single entity — declaring it as several incompatible entity"
+        " types is an error, except a well-defined pun (concept+class or class+individual)"
+    )
+    severity = Severity.ERROR
+    applies_to = VocabType.RDF
+
+    def run(self, graph: Graph, config: CheckConfig) -> list[Violation]:
+        buckets: dict[URIRef, set[str]] = {}
+        for rdf_type, bucket in _ENTITY_TYPE_BUCKETS.items():
+            for subject in graph.subjects(RDF.type, rdf_type):
+                if isinstance(subject, URIRef):
+                    buckets.setdefault(subject, set()).add(bucket)
+
+        violations = []
+        for uri, kinds in sorted(buckets.items(), key=lambda kv: str(kv[0])):
+            if len(kinds) < 2 or frozenset(kinds) in _ALLOWED_PUNS:
+                continue
+            violations.append(
+                Violation(
+                    self.id,
+                    f"URI is declared as multiple entity types ({', '.join(sorted(kinds))});"
+                    f" only a concept+class or class+individual pun may share a URI: <{uri}>",
+                    self.severity,
+                    subject=uri,
+                )
+            )
         return violations

@@ -8,6 +8,7 @@ from rdflib.term import URIRef
 from semanticlint.checks.base import CheckConfig
 from semanticlint.checks.rdf.uris import (
     BaseURIConsistencyCheck,
+    DuplicateEntityURICheck,
     InconsistentSeparatorCheck,
     MalformedURICheck,
     NonHttpURICheck,
@@ -20,6 +21,7 @@ _URI_CHECKS = [
     NonHttpURICheck,
     InconsistentSeparatorCheck,
     BaseURIConsistencyCheck,
+    DuplicateEntityURICheck,
 ]
 
 
@@ -44,6 +46,19 @@ def concept_uri_with_space() -> Graph:
 def concept_uri_with_control_char() -> Graph:
     g = Graph()
     g.add((URIRef("http://example.org/a\x01b"), RDF.type, SKOS.Concept))
+    return g
+
+
+@given("a SKOS concept whose URI has more than one hash fragment", target_fixture="graph")
+def concept_uri_with_two_hashes() -> Graph:
+    g = Graph()
+    g.add(
+        (
+            URIRef("https://ontology.adeo.com/kb#https://docs.google.com/presentation/d/1#slide"),
+            RDF.type,
+            SKOS.Concept,
+        )
+    )
     return g
 
 
@@ -139,6 +154,43 @@ def scheme_with_external_class() -> Graph:
     g.add((URIRef("http://example.org/tax"), RDF.type, SKOS.ConceptScheme))
     g.add((OWL.Class, RDF.type, OWL.Class))
     return g
+
+
+# ── RDF007 Givens (duplicate entity URI) ──────────────────────────────────────
+
+_X = URIRef("http://example.org/X")
+
+
+def _typed_graph(*types) -> Graph:
+    g = Graph()
+    for t in types:
+        g.add((_X, RDF.type, t))
+    return g
+
+
+@given("a URI declared only as a SKOS concept", target_fixture="graph")
+def uri_single_concept() -> Graph:
+    return _typed_graph(SKOS.Concept)
+
+
+@given("a URI declared as both a SKOS concept and an OWL class", target_fixture="graph")
+def uri_concept_class_pun() -> Graph:
+    return _typed_graph(SKOS.Concept, OWL.Class)
+
+
+@given("a URI declared as both an OWL class and an OWL named individual", target_fixture="graph")
+def uri_class_individual_pun() -> Graph:
+    return _typed_graph(OWL.Class, OWL.NamedIndividual)
+
+
+@given("a URI declared as both a SKOS concept and an OWL object property", target_fixture="graph")
+def uri_concept_property() -> Graph:
+    return _typed_graph(SKOS.Concept, OWL.ObjectProperty)
+
+
+@given("a URI declared as a concept, a class and an individual", target_fixture="graph")
+def uri_three_types() -> Graph:
+    return _typed_graph(SKOS.Concept, OWL.Class, OWL.NamedIndividual)
 
 
 # ── When ──────────────────────────────────────────────────────────────────────
