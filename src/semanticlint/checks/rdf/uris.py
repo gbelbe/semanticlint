@@ -10,25 +10,71 @@ from rdflib.term import URIRef
 from semanticlint.checks.base import Check, CheckConfig, Severity, Violation, VocabType
 from semanticlint.checks.registry import CheckRegistry
 
+# ── RFC 3986 URI grammar (validating) ─────────────────────────────────────────
+# We validate every URIRef against the RFC 3986 "URI" production, composed here
+# from its ABNF pieces (each constant maps to one rule). The character classes
+# are widened with the RFC 3987 ``ucschar`` range so internationalised IRIs —
+# which RDF explicitly permits — are accepted rather than flagged. The composed
+# pattern is applied with ``fullmatch``; anything the grammar cannot produce (a
+# space, a stray second ``#``, broken percent-encoding, a control character, an
+# illegal delimiter, a missing scheme, …) is reported as malformed.
+#
+# ucschar = %xA0-D7FF / %xF900-FDCF / %xFDF0-FFEF / %x10000-1FFFD / … / %xE1000-EFFFD
+_UCSCHAR = (
+    " -퟿豈-﷏ﷰ-￯"
+    "\U00010000-\U0001fffd\U00020000-\U0002fffd\U00030000-\U0003fffd"
+    "\U00040000-\U0004fffd\U00050000-\U0005fffd\U00060000-\U0006fffd"
+    "\U00070000-\U0007fffd\U00080000-\U0008fffd\U00090000-\U0009fffd"
+    "\U000a0000-\U000afffd\U000b0000-\U000bfffd\U000c0000-\U000cfffd"
+    "\U000d0000-\U000dfffd\U000e1000-\U000efffd"
+)
+_IUNRESERVED = "A-Za-z0-9._~\\-" + _UCSCHAR  # unreserved / ucschar
+_SUB_DELIMS = "!$&'()*+,;="
+_PCHAR = _IUNRESERVED + _SUB_DELIMS + ":@"  # + pct-encoded (added by _star)
+_QUERY_FRAG = _PCHAR + "/?"  # query / fragment = *( pchar / "/" / "?" )
+_PCT = "%[0-9A-Fa-f]{2}"  # pct-encoded
+
+
+def _star(char_class: str) -> str:
+    """``*( char_class / pct-encoded )`` — a repeated ABNF character group."""
+    return f"(?:[{char_class}]|{_PCT})*"
+
+
+_SCHEME = "[A-Za-z][A-Za-z0-9+.\\-]*"
+_USERINFO = _star(_IUNRESERVED + _SUB_DELIMS + ":")
+_REG_NAME = _star(_IUNRESERVED + _SUB_DELIMS)  # IPv4address is a subset of this
+_IP_LITERAL = "\\[[0-9A-Fa-f:.]+\\]"
+_HOST = f"(?:{_IP_LITERAL}|{_REG_NAME})"
+_AUTHORITY = f"(?:{_USERINFO}@)?{_HOST}(?::[0-9]*)?"
+_SEGMENT = _star(_PCHAR)
+_SEGMENT_NZ = f"(?:[{_PCHAR}]|{_PCT})+"
+_HIER_PART = (
+    f"(?://{_AUTHORITY}(?:/{_SEGMENT})*"  # "//" authority path-abempty
+    f"|/(?:{_SEGMENT_NZ}(?:/{_SEGMENT})*)?"  # path-absolute
+    f"|{_SEGMENT_NZ}(?:/{_SEGMENT})*"  # path-rootless
+    f"|)"  # path-empty
+)
+_URI_RE = re.compile(
+    f"{_SCHEME}:{_HIER_PART}(?:\\?{_star(_QUERY_FRAG)})?(?:#{_star(_QUERY_FRAG)})?",
+    re.UNICODE,
+)
+
+# Cheap, specific hints so the violation message names the actual defect.
 _MALFORMED_CHARS = re.compile(r"[ <>\x00-\x1f\x7f]")
+_BAD_PCT = re.compile(r"%(?![0-9A-Fa-f]{2})")
 
 
 def _malformed_reason(uri: str) -> str | None:
-    """Return why a URI is malformed, or ``None`` if it looks well-formed.
-
-    Two independent defects are caught:
-
-    * illegal characters — spaces, angle brackets or control characters that a
-      URI may never contain;
-    * more than one ``#`` — a URI reference has at most one fragment separator
-      (RFC 3986), so a second ``#`` (e.g. a whole URL pasted into the fragment)
-      is structurally invalid.
-    """
+    """Return why a URI is malformed per RFC 3986, or ``None`` if well-formed."""
+    if _URI_RE.fullmatch(uri):
+        return None
     if _MALFORMED_CHARS.search(uri):
         return "URI contains illegal characters"
     if uri.count("#") > 1:
         return "URI has more than one '#' fragment separator"
-    return None
+    if _BAD_PCT.search(uri):
+        return "URI has invalid percent-encoding"
+    return "URI is not a well-formed RFC 3986 URI"
 
 
 _EXTERNAL_PREFIXES = (
@@ -87,8 +133,9 @@ def _matches_base(entity_uri: str, base: str) -> bool:
 class MalformedURICheck(Check):
     id = "RDF003"
     description = (
-        "URI is malformed — illegal characters (spaces, angle brackets, "
-        "control characters) or more than one '#' fragment separator"
+        "URI is malformed — does not conform to the RFC 3986 grammar "
+        "(illegal characters, broken percent-encoding, a stray second '#', "
+        "a missing scheme, …)"
     )
     severity = Severity.ERROR
     applies_to = VocabType.RDF

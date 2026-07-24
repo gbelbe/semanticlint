@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from rdflib import RDF, Graph
 from rdflib.namespace import OWL, RDFS, SKOS
 from rdflib.term import URIRef
@@ -99,6 +100,63 @@ def test_rdf003_violation_url_pasted_into_fragment():
     g.add((bad, RDF.type, SKOS.Concept))
     violations = _run(MalformedURICheck, g)
     assert any(v.check_id == "RDF003" and v.subject == bad for v in violations)
+
+
+# ── RDF003: full RFC 3986 grammar validation ──────────────────────────────────
+
+# Well-formed URIs/IRIs of every shape must pass untouched (no false positives).
+_WELL_FORMED_URIS = [
+    "http://example.org/C1",
+    "https://ex.org/vocab#Concept",
+    "http://www.w3.org/2002/07/owl#Class",
+    "http://purl.org/dc/terms/",
+    "urn:uuid:6e8bc430-9c3a-11d9-9669-0800200c9a66",
+    "file:///example/C1",
+    "http://ex.org/x?a=1&b=2#frag",
+    "http://ex.org/p%C3%A9rignon",  # valid percent-encoding
+    "http://例え.jp/資源#概念",  # internationalised IRI (RFC 3987 ucschar)
+    "mailto:user@example.com",
+    "tag:example.com,2024:thing",
+    "http://[2001:db8::1]:8080/x",  # IPv6 host literal + port
+]
+
+# Structurally invalid identifiers the RFC grammar rejects.
+_MALFORMED_URIS = [
+    "http://example.org/my concept",  # space
+    "http://example.org/a\x01b",  # control character
+    "http://example.org/<foo>",  # angle brackets
+    "http://ex.org/a{b}",  # braces
+    "http://ex.org/a|b",  # pipe
+    "http://ex.org/a`b",  # backtick
+    'http://ex.org/a"b',  # double quote
+    "http://ex.org/%zz",  # non-hex percent-encoding
+    "http://ex.org/%1",  # truncated percent-encoding
+    "http://ex.org/vocab#a#b",  # two fragment separators
+    "not a uri at all",  # no scheme
+]
+
+
+@pytest.mark.parametrize("uri", _WELL_FORMED_URIS)
+def test_rdf003_well_formed_uri_never_flagged(uri):
+    g = Graph()
+    g.add((URIRef(uri), RDF.type, SKOS.Concept))
+    assert _run(MalformedURICheck, g) == [], uri
+
+
+@pytest.mark.parametrize("uri", _MALFORMED_URIS)
+def test_rdf003_malformed_uri_is_flagged(uri):
+    g = Graph()
+    bad = URIRef(uri)
+    g.add((bad, RDF.type, SKOS.Concept))
+    violations = _run(MalformedURICheck, g)
+    assert any(v.check_id == "RDF003" and v.subject == bad for v in violations), uri
+
+
+def test_rdf003_reports_invalid_percent_encoding_reason():
+    g = Graph()
+    g.add((URIRef("http://ex.org/%zz"), RDF.type, SKOS.Concept))
+    violations = _run(MalformedURICheck, g)
+    assert any("percent-encoding" in v.message for v in violations)
 
 
 # ── RDF004 ────────────────────────────────────────────────────────────────────
