@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from rdflib import RDF, Graph
-from rdflib.namespace import OWL, SKOS
+from rdflib.namespace import OWL, RDFS, SKOS
 from rdflib.term import URIRef
 
 from semanticlint.checks.base import CheckConfig, Severity
 from semanticlint.checks.rdf.uris import (
     BaseURIConsistencyCheck,
+    DuplicateEntityURICheck,
     InconsistentSeparatorCheck,
     MalformedURICheck,
     NonHttpURICheck,
@@ -301,3 +302,64 @@ def test_rdf006_false_positive_guard_similar_prefix():
     g.add((outsider, RDF.type, OWL.Class))
     violations = _run(BaseURIConsistencyCheck, g)
     assert any(v.check_id == "RDF006" for v in violations)
+
+
+# ── RDF007: duplicate entity URI ──────────────────────────────────────────────
+
+_NI = OWL.NamedIndividual
+
+
+def _typed(*types):
+    g = Graph()
+    for t in types:
+        g.add((URIRef("http://example.org/X"), RDF.type, t))
+    return g
+
+
+def test_rdf007_no_violation_single_type():
+    assert _run(DuplicateEntityURICheck, _typed(SKOS.Concept)) == []
+
+
+def test_rdf007_no_violation_concept_class_pun():
+    assert _run(DuplicateEntityURICheck, _typed(SKOS.Concept, OWL.Class)) == []
+
+
+def test_rdf007_no_violation_class_individual_pun():
+    assert _run(DuplicateEntityURICheck, _typed(OWL.Class, _NI)) == []
+
+
+def test_rdf007_no_violation_property_subtype_pun():
+    # An Object+Annotation property is one 'property' bucket, not cross-entity duplication.
+    assert _run(DuplicateEntityURICheck, _typed(OWL.ObjectProperty, OWL.AnnotationProperty)) == []
+
+
+def test_rdf007_violation_concept_and_property():
+    violations = _run(DuplicateEntityURICheck, _typed(SKOS.Concept, OWL.ObjectProperty))
+    assert any(v.check_id == "RDF007" for v in violations)
+
+
+def test_rdf007_violation_individual_and_property():
+    violations = _run(DuplicateEntityURICheck, _typed(_NI, OWL.DatatypeProperty))
+    assert any(v.check_id == "RDF007" for v in violations)
+
+
+def test_rdf007_violation_concept_and_individual():
+    violations = _run(DuplicateEntityURICheck, _typed(SKOS.Concept, _NI))
+    assert any(v.check_id == "RDF007" for v in violations)
+
+
+def test_rdf007_violation_three_entity_types():
+    violations = _run(DuplicateEntityURICheck, _typed(SKOS.Concept, OWL.Class, _NI))
+    assert any(v.check_id == "RDF007" for v in violations)
+
+
+def test_rdf007_violation_is_an_error_pointing_at_the_uri():
+    violations = _run(DuplicateEntityURICheck, _typed(SKOS.Concept, OWL.ObjectProperty))
+    v = next(v for v in violations if v.check_id == "RDF007")
+    assert v.severity == Severity.ERROR
+    assert v.subject == URIRef("http://example.org/X")
+
+
+def test_rdf007_no_violation_for_rdfs_class_and_owl_class():
+    # Both collapse to the 'class' bucket → one entity, no duplication.
+    assert _run(DuplicateEntityURICheck, _typed(RDFS.Class, OWL.Class)) == []
