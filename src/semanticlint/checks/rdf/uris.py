@@ -12,6 +12,25 @@ from semanticlint.checks.registry import CheckRegistry
 
 _MALFORMED_CHARS = re.compile(r"[ <>\x00-\x1f\x7f]")
 
+
+def _malformed_reason(uri: str) -> str | None:
+    """Return why a URI is malformed, or ``None`` if it looks well-formed.
+
+    Two independent defects are caught:
+
+    * illegal characters — spaces, angle brackets or control characters that a
+      URI may never contain;
+    * more than one ``#`` — a URI reference has at most one fragment separator
+      (RFC 3986), so a second ``#`` (e.g. a whole URL pasted into the fragment)
+      is structurally invalid.
+    """
+    if _MALFORMED_CHARS.search(uri):
+        return "URI contains illegal characters"
+    if uri.count("#") > 1:
+        return "URI has more than one '#' fragment separator"
+    return None
+
+
 _EXTERNAL_PREFIXES = (
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
     "http://www.w3.org/2000/01/rdf-schema#",
@@ -67,7 +86,10 @@ def _matches_base(entity_uri: str, base: str) -> bool:
 @CheckRegistry.register
 class MalformedURICheck(Check):
     id = "RDF003"
-    description = "URI contains illegal characters (spaces, angle brackets, control characters)"
+    description = (
+        "URI is malformed — illegal characters (spaces, angle brackets, "
+        "control characters) or more than one '#' fragment separator"
+    )
     severity = Severity.ERROR
     applies_to = VocabType.RDF
 
@@ -79,12 +101,12 @@ class MalformedURICheck(Check):
                 if not isinstance(node, URIRef) or node in seen:
                     continue
                 seen.add(node)
-                uri = str(node)
-                if _MALFORMED_CHARS.search(uri):
+                reason = _malformed_reason(str(node))
+                if reason is not None:
                     violations.append(
                         Violation(
                             self.id,
-                            f"URI contains illegal characters: <{uri}>",
+                            f"{reason}: <{node}>",
                             self.severity,
                             subject=node,
                         )

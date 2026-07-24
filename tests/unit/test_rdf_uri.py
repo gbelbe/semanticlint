@@ -75,6 +75,32 @@ def test_rdf003_object_uriref_also_checked():
     assert any(v.check_id == "RDF003" for v in violations)
 
 
+def test_rdf003_no_violation_single_hash_fragment():
+    g = Graph()
+    g.add((URIRef("http://example.org/vocab#C1"), RDF.type, SKOS.Concept))
+    assert _run(MalformedURICheck, g) == []
+
+
+def test_rdf003_violation_two_hash_fragments():
+    g = Graph()
+    g.add((URIRef("http://example.org/vocab#a#b"), RDF.type, SKOS.Concept))
+    violations = _run(MalformedURICheck, g)
+    assert any(v.check_id == "RDF003" for v in violations)
+
+
+def test_rdf003_violation_url_pasted_into_fragment():
+    # Real-world case: a whole Google-Slides URL crammed into the fragment —
+    # two '#' separators, structurally invalid per RFC 3986.
+    g = Graph()
+    bad = URIRef(
+        "https://ontology.adeo.com/kai-internal-knowledge#"
+        "https://docs.google.com/presentation/d/1oKfiFcyb/edit#slide=id.g3e8"
+    )
+    g.add((bad, RDF.type, SKOS.Concept))
+    violations = _run(MalformedURICheck, g)
+    assert any(v.check_id == "RDF003" and v.subject == bad for v in violations)
+
+
 # ── RDF004 ────────────────────────────────────────────────────────────────────
 
 

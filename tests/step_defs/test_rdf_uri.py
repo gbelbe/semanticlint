@@ -49,6 +49,19 @@ def concept_uri_with_control_char() -> Graph:
     return g
 
 
+@given("a SKOS concept whose URI has more than one hash fragment", target_fixture="graph")
+def concept_uri_with_two_hashes() -> Graph:
+    g = Graph()
+    g.add(
+        (
+            URIRef("https://ontology.adeo.com/kb#https://docs.google.com/presentation/d/1#slide"),
+            RDF.type,
+            SKOS.Concept,
+        )
+    )
+    return g
+
+
 @given("a SKOS concept with an HTTP URI", target_fixture="graph")
 def concept_http_uri() -> Graph:
     g = Graph()

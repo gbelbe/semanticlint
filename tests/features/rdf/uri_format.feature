@@ -20,6 +20,11 @@ Feature: URI format integrity
     When I run the URI format checks
     Then there is a violation with id "RDF003"
 
+  Scenario: A concept URI with a whole URL pasted into its fragment produces RDF003
+    Given a SKOS concept whose URI has more than one hash fragment
+    When I run the URI format checks
+    Then there is a violation with id "RDF003"
+
   # ── RDF004: non-HTTP/HTTPS scheme ──────────────────────────────────────────
 
   Scenario: A concept with an HTTP URI does not produce RDF004
