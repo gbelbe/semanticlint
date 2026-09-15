@@ -31,6 +31,17 @@ ex:C1 a skos:Concept ; skos:inScheme ex:Scheme .
 ex:C2 a skos:Concept ; skos:inScheme ex:Scheme .
 """
 
+_INFO_REPORT_TRIGGERING_SKOS = """\
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix ex:   <http://example.org/> .
+
+ex:Scheme a skos:ConceptScheme .
+ex:C1 a skos:Concept ;
+    skos:inScheme ex:Scheme ;
+    skos:prefLabel "Concept One"@en .
+"""
+
+
 _INVALID_TURTLE = """\
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 ex:C1 a skos:Concept
@@ -61,6 +72,16 @@ def skos_missing_labels(tmp_path: Path) -> Path:
     return p
 
 
+@given(
+    "a SKOS Turtle file missing definitions and triggering info-level report",
+    target_fixture="cli_path",
+)
+def skos_missing_definitions(tmp_path: Path) -> Path:
+    p = tmp_path / "missing_definitions.ttl"
+    p.write_text(_INFO_REPORT_TRIGGERING_SKOS)
+    return p
+
+
 @given("a non-existent path", target_fixture="cli_path")
 def nonexistent_path(tmp_path: Path) -> Path:
     return tmp_path / "does_not_exist.ttl"
@@ -77,3 +98,10 @@ def run_check(cli_path: Path):
 @when(parsers.parse('I run semanticlint check with fail-on "{level}"'), target_fixture="result")
 def run_check_fail_on(cli_path: Path, level: str):
     return runner.invoke(app, ["check", str(cli_path), "--fail-on", level])
+
+
+@when(
+    parsers.parse('I run semanticlint check with min-severity "{level}"'), target_fixture="result"
+)
+def run_check_min_severity(cli_path: Path, level: str):
+    return runner.invoke(app, ["check", str(cli_path), "--min-severity", level])

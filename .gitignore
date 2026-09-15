@@ -14,3 +14,4 @@ build/
 htmlcov/
 *.ttl.lock
 .DS_Store
+.idea

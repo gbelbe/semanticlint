@@ -59,6 +59,11 @@ def check(
     fail_on: str = typer.Option(
         "error", "--fail-on", help="Minimum severity that causes exit 1 [error|warning|info]."
     ),
+    min_severity: str = typer.Option(
+        "info",
+        "--min-severity",
+        help="Minimum severity to display [error|warning|info].",
+    ),
 ) -> None:
     console = Console(file=sys.stdout, highlight=False)
 
@@ -70,6 +75,12 @@ def check(
         fail_on_severity = Severity(fail_on)
     except ValueError:
         console.print("[bold red]Error:[/] --fail-on must be one of: error, warning, info")
+        raise typer.Exit(1)
+
+    try:
+        min_severity_enum = Severity(min_severity)
+    except ValueError:
+        console.print("[bold red]Error:[/] --min-severity must be one of: error, warning, info")
         raise typer.Exit(1)
 
     search_dir = path.parent if path.is_file() else path
@@ -89,6 +100,12 @@ def check(
 
         if graph is not None and len(graph) > 0:
             file_violations.extend(check_graph(graph, cfg, extra_shapes=local_shapes))
+
+        file_violations = [
+            violation
+            for violation in file_violations
+            if _meets_threshold(violation.severity, min_severity_enum)
+        ]
 
         if file_violations:
             console.print(f"\n[bold]{file_path}[/]")
