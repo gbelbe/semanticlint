@@ -12,14 +12,19 @@ def _assert_exit(result, code: int) -> None:
     )
 
 
-@then("the exit code is 0")
-def exit_zero(result) -> None:
-    _assert_exit(result, 0)
+@then(parsers.parse("the exit code is {code:d}"))
+def exit_zero(result, code: int) -> None:
+    _assert_exit(result, code)
 
 
-@then("the exit code is 1")
-def exit_one(result) -> None:
-    _assert_exit(result, 1)
+@then(parsers.parse('the output {condition} "{text}"'))
+def output_containment(result, condition: str, text: str) -> None:
+    if condition == "contains":
+        assert text in result.output, f"Expected {text!r} in output, got:\n{result.output}"
+    elif condition == "does not contain":
+        assert text not in result.output, f"Expected {text!r} not in output, got:\n{result.output}"
+    else:
+        raise ValueError(f"Unsupported output condition: {condition!r}")
 
 
 @pytest.fixture()
