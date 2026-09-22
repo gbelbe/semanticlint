@@ -76,7 +76,17 @@ pip install semanticlint
 ```bash
 semanticlint check my-taxonomy.ttl
 semanticlint check vocabularies/ --select SKO --ignore SKO003
+semanticlint check vocabularies/ --min-severity error
 ```
+
+### CLI options
+
+| Option | Description | Default |
+|---|---|---|
+| `path` | File or directory to check | `.` |
+| `--min-severity` | Minimum severity to display (`error`, `warning`, `info`) | `info` |
+| `--fail-on` | Minimum severity that causes exit code 1 (`error`, `warning`, `info`) | `error` |
+| `--config` | Path to `onto-ci.yml` configuration file | auto-discovered |
 
 ## Project-specific rules (`*.shapes.ttl`)
 
