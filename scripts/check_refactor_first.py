@@ -120,8 +120,12 @@ def scan_ref(repo: Path, ref: str, scratch_parent: Path) -> dict[str, int]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--base", required=True, help="base ref this branch diverged from, e.g. origin/main")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--base", required=True, help="base ref this branch diverged from, e.g. origin/main"
+    )
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--path", default=str(REPO_ROOT), help="repo root (default: this repo)")
     args = parser.parse_args()
@@ -129,10 +133,17 @@ def main() -> int:
     repo = Path(args.path).resolve()
 
     verify = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", args.base], cwd=repo, capture_output=True, check=False
+        ["git", "rev-parse", "--verify", "--quiet", args.base],
+        cwd=repo,
+        capture_output=True,
+        check=False,
     )
     if verify.returncode != 0:
-        print(f"⚠ refactor-first gate: '{args.base}' not found locally — skipping (git fetch it first)", file=sys.stderr)
+        print(
+            f"⚠ refactor-first gate: '{args.base}' not found locally — "
+            "skipping (git fetch it first)",
+            file=sys.stderr,
+        )
         return 0
 
     merge_base = _git(["merge-base", args.base, args.head], cwd=repo).strip()
@@ -142,7 +153,10 @@ def main() -> int:
         return 0  # nothing touched, nothing to check
 
     if has_tidy_exempt(repo, merge_base, args.head):
-        print(f"refactor-first gate: Tidy-Exempt: trailer found in {merge_base[:8]}..{args.head} — skipping.")
+        print(
+            f"refactor-first gate: Tidy-Exempt: trailer found in "
+            f"{merge_base[:8]}..{args.head} — skipping."
+        )
         return 0
 
     with tempfile.TemporaryDirectory(prefix="craft-gate-refactor-first-") as tmp:
@@ -157,10 +171,15 @@ def main() -> int:
         ok = after == 0 if before == 0 else after < before
         if not ok:
             label = new_rel if old_rel == new_rel else f"{old_rel} -> {new_rel}"
-            failures.append(f"  {label}: {before} -> {after} (needed {'0' if before == 0 else f'< {before}'})")
+            failures.append(
+                f"  {label}: {before} -> {after} (needed {'0' if before == 0 else f'< {before}'})"
+            )
 
     if failures:
-        print("✗ Refactor First gate: total detectable-heuristic count did not go down for:", file=sys.stderr)
+        print(
+            "✗ Refactor First gate: total detectable-heuristic count did not go down for:",
+            file=sys.stderr,
+        )
         for f in failures:
             print(f, file=sys.stderr)
         print(

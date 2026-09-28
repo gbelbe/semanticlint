@@ -309,7 +309,9 @@ def strip_lines_for_dupes(source: str) -> list[tuple[int, str]]:
     return result
 
 
-def find_duplicate_blocks(filtered_by_file: dict[str, list[tuple[int, str]]], min_lines: int) -> list[dict]:
+def find_duplicate_blocks(
+    filtered_by_file: dict[str, list[tuple[int, str]]], min_lines: int
+) -> list[dict]:
     """Hash every min_lines-line window per file; any hash shared by two
     windows (same file or different) is a candidate duplicate, extended
     forward line-by-line to its true length, then de-overlapped so one long
@@ -357,7 +359,10 @@ def find_duplicate_blocks(filtered_by_file: dict[str, list[tuple[int, str]]], mi
     for rel_a, i_a, end_a, rel_b, i_b, end_b in raw_matches:
         pair_key = (rel_a, rel_b) if rel_a <= rel_b else (rel_b, rel_a)
         ranges = covered.setdefault(pair_key, [])
-        if any(i_a >= ca0 and end_a <= ca1 and i_b >= cb0 and end_b <= cb1 for ca0, ca1, cb0, cb1 in ranges):
+        if any(
+            i_a >= ca0 and end_a <= ca1 and i_b >= cb0 and end_b <= cb1
+            for ca0, ca1, cb0, cb1 in ranges
+        ):
             continue
         ranges.append((i_a, end_a, i_b, end_b))
         kept.append(
@@ -431,7 +436,10 @@ def run_ruff(root: Path, rel_files: list[str], rules: list[str]) -> list[dict]:
             check=False,  # ruff exits 1 when it finds anything — not our error
         )
     except FileNotFoundError:
-        raise SystemExit("✗ craftcov needs `ruff` on PATH for this catalog's ruff-mapped entries — pip install ruff.")
+        raise SystemExit(
+            "✗ craftcov needs `ruff` on PATH for this catalog's ruff-mapped entries — "
+            "pip install ruff."
+        )
     if proc.returncode not in (0, 1):
         raise SystemExit(f"✗ ruff failed:\n{proc.stderr}")
     items = []
@@ -440,7 +448,13 @@ def run_ruff(root: Path, rel_files: list[str], rules: list[str]) -> list[dict]:
         if rel is None:
             continue
         items.append(
-            {"rel": rel, "line": item["location"]["row"], "col": item["location"]["column"], "tool": "ruff", "rule": item["code"]}
+            {
+                "rel": rel,
+                "line": item["location"]["row"],
+                "col": item["location"]["column"],
+                "tool": "ruff",
+                "rule": item["code"],
+            }
         )
     return items
 
@@ -450,7 +464,13 @@ def run_pylint(root: Path, rel_files: list[str], rules: list[str]) -> list[dict]
         return []
     try:
         proc = subprocess.run(
-            ["pylint", "--disable=all", f"--enable={','.join(rules)}", "--output-format=json", *rel_files],
+            [
+                "pylint",
+                "--disable=all",
+                f"--enable={','.join(rules)}",
+                "--output-format=json",
+                *rel_files,
+            ],
             cwd=root,
             capture_output=True,
             text=True,
@@ -470,7 +490,15 @@ def run_pylint(root: Path, rel_files: list[str], rules: list[str]) -> list[dict]
         rel = _normalize_path(root, item["path"])
         if rel is None:
             continue
-        items.append({"rel": rel, "line": item["line"], "col": item.get("column", 0), "tool": "pylint", "rule": item["message-id"]})
+        items.append(
+            {
+                "rel": rel,
+                "line": item["line"],
+                "col": item.get("column", 0),
+                "tool": "pylint",
+                "rule": item["message-id"],
+            }
+        )
     return items
 
 
@@ -502,13 +530,15 @@ def run_vulture(root: Path, rel_files: list[str], min_confidence: int) -> list[d
     except FileNotFoundError:
         raise SystemExit(
             "✗ craftcov needs `vulture` on PATH for this catalog's vulture-mapped entries "
-            "(dead-code) — pip install vulture, or drop that entry's vulture detector in catalog.yaml."
+            "(dead-code) — pip install vulture, or drop that entry's vulture detector "
+            "in catalog.yaml."
         )
     items = []
     for line in proc.stdout.splitlines():
         m = _VULTURE_LINE.match(line)
         if not m:
-            continue  # vulture has no machine-readable format; skip anything that doesn't parse rather than crash
+            # vulture has no machine-readable format; skip anything that doesn't parse
+            continue
         rel = _normalize_path(root, m.group("path"))
         if rel is None:
             continue
@@ -637,7 +667,9 @@ def save_report_snapshot(path: Path, agg: dict) -> None:
     )
 
 
-def diff_by_heuristic(old: dict[str, int] | None, new: dict[str, int]) -> list[tuple[str, int, int]]:
+def diff_by_heuristic(
+    old: dict[str, int] | None, new: dict[str, int]
+) -> list[tuple[str, int, int]]:
     """(heuristic_id, old_count, new_count) for every heuristic whose count
     changed — old_count/new_count are 0 for a heuristic that's new or fully
     resolved. Empty list (not None) when old is None (first-ever run) is the
@@ -686,7 +718,9 @@ def aggregate(by_file: dict[str, list[dict]]) -> dict:
     }
 
 
-def print_diff_section(prev_snapshot: dict | None, agg: dict, catalog_by_id: dict[str, dict]) -> None:
+def print_diff_section(
+    prev_snapshot: dict | None, agg: dict, catalog_by_id: dict[str, dict]
+) -> None:
     if prev_snapshot is None:
         print("Changes since last run: none — this is the first run (no previous snapshot).")
         print()
@@ -734,9 +768,14 @@ def print_text_report(
         f"({timing['changed']} changed, {timing['cached']} from cache) in {timing['elapsed']:.2f}s"
     )
     if timing.get("dupes_elapsed", 0) > 0:
-        print(f"Duplicate-code pass: {timing['dupes_elapsed']:.2f}s (always full-corpus — see README)")
+        print(
+            f"Duplicate-code pass: {timing['dupes_elapsed']:.2f}s (always full-corpus — see README)"
+        )
     if scope_label:
-        print(f"Reporting scope: {scope_label} only (full corpus was still scanned — see --file's help)")
+        print(
+            f"Reporting scope: {scope_label} only "
+            "(full corpus was still scanned — see --file's help)"
+        )
     print()
 
     if show_diff:
@@ -750,7 +789,7 @@ def print_text_report(
         rows = sorted(agg["by_heuristic"].items(), key=lambda kv: -kv[1])
         for hid, count in rows:
             entry = catalog_by_id[hid]
-            print(f"{entry.get('code',''):7s} {hid:38s} {count:6d}  {entry['source']}")
+            print(f"{entry.get('code', ''):7s} {hid:38s} {count:6d}  {entry['source']}")
         print(f"{'':7s} {'TOTAL':38s} {agg['total']:6d}")
         print()
 
@@ -778,8 +817,15 @@ def print_text_report(
                 rule = f"{f['tool']}:{f['rule']}" if f["rule"] else f["tool"]
                 if f.get("confidence") is not None:
                     rule += f" {f['confidence']}%"
-                dup = f"  <-> {f['duplicate_of']} ({f['dup_lines']} lines)" if f.get("duplicate_of") else ""
-                print(f"  {rel}:{f['line']}  {f['heuristic_code']} {f['heuristic_id']} ({rule}){scope}{dup}")
+                dup = (
+                    f"  <-> {f['duplicate_of']} ({f['dup_lines']} lines)"
+                    if f.get("duplicate_of")
+                    else ""
+                )
+                print(
+                    f"  {rel}:{f['line']}  {f['heuristic_code']} {f['heuristic_id']} "
+                    f"({rule}){scope}{dup}"
+                )
 
     n_detectable = sum(1 for e in catalog_by_id.values() if e.get("detectors"))
     n_total = len(catalog_by_id)
@@ -802,7 +848,7 @@ def print_detector_list(catalog: list[dict]) -> None:
             for d in detectors:
                 parts.append(f"{d['tool']}: {', '.join(d['rules'])}" if "rules" in d else d["tool"])
             status = " + ".join(parts)
-        print(f"{e.get('code',''):7s} {e['id']:38s} {status}")
+        print(f"{e.get('code', ''):7s} {e['id']:38s} {status}")
 
 
 def merge_corpus_findings(
@@ -815,7 +861,9 @@ def merge_corpus_findings(
         return
     cfg = corpus_tool["dupes"]
     entry = cfg["entry"]
-    min_lines = cfg.get("min_lines", 8)  # see catalog.yaml's comment for the PMD-calibration behind this
+    min_lines = cfg.get(
+        "min_lines", 8
+    )  # see catalog.yaml's comment for the PMD-calibration behind this
     items = run_dupes(root, all_files, min_lines)
 
     scopes_cache: dict[str, list[tuple[int, int, str, str]]] = {}
@@ -844,37 +892,59 @@ def merge_corpus_findings(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--path", default=".", help="repo root to scan (default: .)")
     parser.add_argument("--cache-file", default=str(DEFAULT_CACHE_PATH))
-    parser.add_argument("--no-cache", action="store_true", help="ignore and overwrite the existing cache")
-    parser.add_argument("--snapshot-file", default=str(DEFAULT_SNAPSHOT_PATH), help="where the by-heuristic totals from this run are saved, to diff against next time")
-    parser.add_argument("--no-diff", action="store_true", help="don't print the 'changes since last run' section (the snapshot still updates for next time)")
+    parser.add_argument(
+        "--no-cache", action="store_true", help="ignore and overwrite the existing cache"
+    )
+    parser.add_argument(
+        "--snapshot-file",
+        default=str(DEFAULT_SNAPSHOT_PATH),
+        help="where the by-heuristic totals from this run are saved, to diff against next time",
+    )
+    parser.add_argument(
+        "--no-diff",
+        action="store_true",
+        help="don't print the 'changes since last run' section "
+        "(the snapshot still updates for next time)",
+    )
     parser.add_argument("--format", choices=["text", "json"], default="text")
-    parser.add_argument("--verbose", "-v", action="store_true", help="list every finding, not just the summary")
-    parser.add_argument("--list-detectors", action="store_true", help="print which heuristics are detectable and how, then exit")
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="list every finding, not just the summary"
+    )
+    parser.add_argument(
+        "--list-detectors",
+        action="store_true",
+        help="print which heuristics are detectable and how, then exit",
+    )
     parser.add_argument(
         "--file",
         default=None,
-        help="report only findings in this one file (a REPORT filter, applied after the full corpus scan — "
-        "dupes still needs every file scanned to find a match's other half, so this never restricts what "
-        "gets scanned, only what gets shown/counted). Path relative to --path, or absolute.",
+        help="report only findings in this one file (a REPORT filter, applied after the "
+        "full corpus scan — dupes still needs every file scanned to find a match's "
+        "other half, so this never restricts what gets scanned, only what gets "
+        "shown/counted). Path relative to --path, or absolute.",
     )
     parser.add_argument(
         "--class",
         dest="cls",
         default=None,
-        help="further restrict --file to one enclosing class (module-level findings excluded). Ignored without --file.",
+        help="further restrict --file to one enclosing class (module-level findings "
+        "excluded). Ignored without --file.",
     )
     parser.add_argument(
         "--vulture-min-confidence",
         type=int,
         default=0,
         metavar="N",
-        help="vulture's own confidence floor (0-100, default 0 = vulture's default: report everything). "
-        "On a real codebase this tends to cluster at 60%% (functions/classes/methods, vulture's own "
-        "'fairly sure but could be wrong' tier) and 100%% (unused variables, redundant with ruff's own "
-        "F841). The cache doesn't know about this flag — changing it between runs needs --no-cache "
+        help="vulture's own confidence floor (0-100, default 0 = vulture's default: "
+        "report everything). On a real codebase this tends to cluster at 60%% "
+        "(functions/classes/methods, vulture's own 'fairly sure but could be wrong' "
+        "tier) and 100%% (unused variables, redundant with ruff's own F841). The cache "
+        "doesn't know about this flag — changing it between runs needs --no-cache "
         "to actually take effect.",
     )
     args = parser.parse_args()
@@ -906,7 +976,11 @@ def main() -> int:
     changed = [rel for rel in files if cached_files.get(rel, {}).get("hash") != hashes[rel]]
     unchanged = [rel for rel in files if rel not in changed]
 
-    new_findings = scan_files(root, changed, rule_maps, whole_tool, args.vulture_min_confidence) if changed else {}
+    new_findings = (
+        scan_files(root, changed, rule_maps, whole_tool, args.vulture_min_confidence)
+        if changed
+        else {}
+    )
 
     by_file: dict[str, list[dict]] = {}
     for rel in unchanged:
@@ -930,7 +1004,10 @@ def main() -> int:
     if args.file:
         target = _normalize_path(root, args.file)
         if target is None or target not in files:
-            raise SystemExit(f"✗ --file {args.file!r} not found among this repo's tracked .py files (relative to {root})")
+            raise SystemExit(
+                f"✗ --file {args.file!r} not found among this repo's tracked "
+                f".py files (relative to {root})"
+            )
         findings = by_file.get(target, [])
         if args.cls:
             findings = [f for f in findings if f.get("class") == args.cls]
@@ -953,12 +1030,23 @@ def main() -> int:
                 "previous_generated_at": (prev_snapshot or {}).get("generated_at"),
                 "by_heuristic": [
                     {"heuristic_id": hid, "old": old_count, "new": new_count}
-                    for hid, old_count, new_count in diff_by_heuristic((prev_snapshot or {}).get("by_heuristic"), agg["by_heuristic"])
+                    for hid, old_count, new_count in diff_by_heuristic(
+                        (prev_snapshot or {}).get("by_heuristic"), agg["by_heuristic"]
+                    )
                 ],
             }
         print(json.dumps(payload, indent=2))
     else:
-        print_text_report(agg, catalog_by_id, by_file, args.verbose, timing, prev_snapshot, show_diff=diff_active, scope_label=scope_label)
+        print_text_report(
+            agg,
+            catalog_by_id,
+            by_file,
+            args.verbose,
+            timing,
+            prev_snapshot,
+            show_diff=diff_active,
+            scope_label=scope_label,
+        )
 
     if not args.file:
         save_report_snapshot(snapshot_path, agg)
