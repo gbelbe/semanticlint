@@ -21,6 +21,27 @@ jobs:
       - name: "Tidy First ratchet: a tidy(<type>) commit or Tidy-Exempt trailer"
         run: bash scripts/check_tidy_ratchet.sh --base "origin/${{ github.base_ref }}"
 
+  # Mechanical companion to the ratchet above: for the 8 catalog heuristics
+  # craftCov can detect (scripts/craftcov.py --list-detectors), a touched
+  # .py file's total across them must go down (or stay at 0) vs. where the
+  # branch diverged from main. See CRAFTSMANSHIP.md's "Refactor First".
+  refactor-first:
+    name: Refactor First gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv sync --extra craftcov
+        run: uv sync --extra craftcov
+
+      - name: "Refactor First: touched files' detectable-heuristic total must go down (or stay 0)"
+        run: uv run python3 scripts/check_refactor_first.py --base "origin/${{ github.base_ref }}"
+
   quality:
     name: Lint, type-check & test
     runs-on: ubuntu-latest

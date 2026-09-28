@@ -32,9 +32,21 @@ Never decide silently and never skip the ask because a candidate looks
 obvious — the catalog names *what* to consider, not *whether* it's worth it
 here, and that judgment call is the developer's.
 
+**Exception**: for the subset of the catalog craftCov can detect (`scripts/craftcov.py --list-detectors`),
+skip the ask entirely and follow `CRAFTSMANSHIP.md`'s "Refactor First"
+section instead — scope craftCov to the touched file, fix one instance of
+every heuristic it finds present, bundle all of it into one `tidy(multi):`
+commit. No judgment call needed there: presence (count > 0) *is* the
+decision, and CI's `refactor-first` gate checks the outcome mechanically.
+
 ## Where the mechanical parts live
 
-- `scripts/check_tidy_ratchet.sh` — the pre-push/CI ratchet.
+- `scripts/check_tidy_ratchet.sh` — the pre-push/CI ratchet (commit-message
+  pattern check, covers the whole catalog).
+- `scripts/check_refactor_first.py` — the pre-push/CI count-based gate for
+  just the 8 detectable heuristics (see "Refactor First" above).
+- `scripts/craftcov.py --file <path> [--class <name>]` — what heuristics
+  (and how many) are currently present in one file, to work through.
 - `scripts/report_tidy_history.sh` — the periodic exemption-ratio and
   cited-sources report (see `CRAFTSMANSHIP.md`'s "Don't let the exemption
   become the rule").

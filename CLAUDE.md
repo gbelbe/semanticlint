@@ -53,6 +53,15 @@ and no `Tidy-Exempt:` trailer in range. It's a text check on commit messages
 only, so it costs milliseconds; it cannot judge whether the right tidying
 was picked.
 
+For the 8 catalog heuristics craftCov can detect mechanically (`uv run
+scripts/craftcov.py --list-detectors`), skip the judgment call: `uv run
+scripts/craftcov.py --file <path>` before touching a file, fix one instance
+of every heuristic it finds present, bundle it all into one `tidy(multi):`
+commit (see `CRAFTSMANSHIP.md`'s "Refactor First"). CI's `refactor-first` job
+(`scripts/check_refactor_first.py`) enforces the *outcome* — a touched
+file's total across those heuristics must go down, or stay at 0 —
+`Tidy-Exempt:` bypasses it the same way it bypasses the ratchet above.
+
 The catalog is also a checklist for **new** code, not just a pre-touch
 ritual: Beck's four rules of simple design (pass the tests, reveal intention,
 no duplication, fewest elements) and Clean Code's function-size/SOLID

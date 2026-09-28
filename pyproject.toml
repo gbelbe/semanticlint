@@ -28,6 +28,15 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML>=6.0",
 ]
+# craft-gate's craftCov scan (scripts/craftcov.py) and the Refactor First CI
+# gate built on it (scripts/check_refactor_first.py) — see CRAFTSMANSHIP.md.
+# pyyaml is already an unconditional dependency above; ruff/pylint/vulture
+# are what `uv sync --extra craftcov` alone needs to run either script.
+craftcov = [
+    "ruff>=0.13",
+    "pylint>=3.3",
+    "vulture>=2.14",
+]
 
 [project.scripts]
 semanticlint = "semanticlint.cli:main"
