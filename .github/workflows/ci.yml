@@ -7,6 +7,20 @@ on:
     branches: ["master"]
 
 jobs:
+  # Text-only check on commit messages — no deps to install, no build. Only
+  # meaningful against a PR's base branch.
+  tidy:
+    name: Tidy First ratchet
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need the base branch and full commit history
+
+      - name: "Tidy First ratchet: a tidy(<type>) commit or Tidy-Exempt trailer"
+        run: bash scripts/check_tidy_ratchet.sh --base "origin/${{ github.base_ref }}"
+
   quality:
     name: Lint, type-check & test
     runs-on: ubuntu-latest

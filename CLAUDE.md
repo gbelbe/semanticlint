@@ -28,6 +28,20 @@ Run `uv run ruff check --fix . && uv run ruff format .` to auto-fix most lint/fo
 - Private attr on third-party type → add `# type: ignore[attr-defined]`
 - Every new `.py` file must start with `from __future__ import annotations`
 
+## Tidy First (mandatory before every feature/fix commit)
+
+Before writing a feature or fix, check the file(s)/function(s)/class(es) it
+touches against the tidying catalog in the `tidy-first` skill (Kent Beck's
+*Tidy First?*). If a tidying applies, do it alone, verify the suite is
+unchanged, and commit it separately: `tidy(<type>): <what and where>`. Only
+then commit the feature/fix. If nothing applies, don't invent a tidying —
+commit with a `Tidy-Exempt: <reason>` trailer instead.
+
+The `tidy-ratchet` check (`scripts/check_tidy_ratchet.sh`, pre-push hook + CI)
+fails a push/PR with no `tidy(...)` commit and no `Tidy-Exempt:` trailer in
+range. It's a text check on commit messages only, so it costs milliseconds;
+it cannot judge whether the right tidying was picked.
+
 ## TDD + BDD workflow (mandatory)
 
 This project follows strict TDD with BDD for behaviour specification.
