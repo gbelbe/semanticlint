@@ -439,7 +439,7 @@ def run_ruff(root: Path, rel_files: list[str], rules: list[str]) -> list[dict]:
         raise SystemExit(
             "✗ craftcov needs `ruff` on PATH for this catalog's ruff-mapped entries — "
             "pip install ruff."
-        )
+        ) from None
     if proc.returncode not in (0, 1):
         raise SystemExit(f"✗ ruff failed:\n{proc.stderr}")
     items = []
@@ -480,11 +480,13 @@ def run_pylint(root: Path, rel_files: list[str], rules: list[str]) -> list[dict]
         raise SystemExit(
             "✗ craftcov needs `pylint` on PATH for this catalog's pylint-mapped entries "
             "(extract-class) — pip install pylint, or drop that entry's detector in catalog.yaml."
-        )
+        ) from None
     try:
         raw = json.loads(proc.stdout or "[]")
     except json.JSONDecodeError:
-        raise SystemExit(f"✗ pylint produced unparseable output:\n{proc.stdout}\n{proc.stderr}")
+        raise SystemExit(
+            f"✗ pylint produced unparseable output:\n{proc.stdout}\n{proc.stderr}"
+        ) from None
     items = []
     for item in raw:
         rel = _normalize_path(root, item["path"])
@@ -532,7 +534,7 @@ def run_vulture(root: Path, rel_files: list[str], min_confidence: int) -> list[d
             "✗ craftcov needs `vulture` on PATH for this catalog's vulture-mapped entries "
             "(dead-code) — pip install vulture, or drop that entry's vulture detector "
             "in catalog.yaml."
-        )
+        ) from None
     items = []
     for line in proc.stdout.splitlines():
         m = _VULTURE_LINE.match(line)

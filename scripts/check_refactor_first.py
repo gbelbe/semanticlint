@@ -34,14 +34,13 @@ Examples:
 from __future__ import annotations
 
 import argparse
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from craftcov import (  # noqa: E402
+from craftcov import (
     aggregate,
     build_detector_index,
     discover_python_files,
