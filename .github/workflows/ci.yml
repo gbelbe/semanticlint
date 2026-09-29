@@ -42,6 +42,77 @@ jobs:
       - name: "Refactor First: touched files' detectable-heuristic total must go down (or stay 0)"
         run: uv run python3 scripts/check_refactor_first.py --base "origin/${{ github.base_ref }}"
 
+  # Independent of craftCov — own script, own catalog entries (CG032-
+  # CG035), own toolchain (radon, cognitive-complexity).
+  complexity:
+    name: Complexity ratchet
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv sync --extra complexity
+        run: uv sync --extra complexity
+
+      - name: "Complexity ratchet: cyclomatic/cognitive complexity, invariant return, duplicated literal"
+        run: uv run python3 scripts/check_complexity_ratchet.py --base "origin/${{ github.base_ref }}"
+
+  # Optional reporting, not a gate — see DESIGN.md's Reporting section.
+  craftcov-pr-comment:
+    name: craftCov PR report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv sync --extra craftcov
+        run: uv sync --extra craftcov
+
+      - name: Post/update the craftCov PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          uv run python3 scripts/craftcov_pr_comment.py \
+            --base "origin/${{ github.base_ref }}" \
+            --repo "${{ github.repository }}" \
+            --pr "${{ github.event.pull_request.number }}"
+
+  # Optional reporting, not a gate. Public repo, so code scanning is
+  # available with no extra licensing.
+  craftcov-sarif:
+    name: Upload craftCov SARIF
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv sync --extra craftcov
+        run: uv sync --extra craftcov
+
+      - name: Generate craftCov SARIF
+        run: uv run python3 scripts/craftcov.py --format sarif --no-cache --no-diff > craftcov.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: craftcov.sarif
+          category: craftcov
+
   quality:
     name: Lint, type-check & test
     runs-on: ubuntu-latest
