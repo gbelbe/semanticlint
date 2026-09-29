@@ -12,7 +12,8 @@ jobs:
   tidy:
     name: Tidy First ratchet
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # Skips bot-authored PRs (dependabot, etc.) — see complexity job's comment.
+    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +29,8 @@ jobs:
   refactor-first:
     name: Refactor First gate
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # Skips bot-authored PRs (dependabot, etc.) — see complexity job's comment.
+    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +49,9 @@ jobs:
   complexity:
     name: Complexity ratchet
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # Skips bot-authored PRs (dependabot, etc.): can't write a Tidy-Exempt:
+    # trailer, and a dependency bump has no complexity to fix.
+    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
     steps:
       - uses: actions/checkout@v4
         with:
