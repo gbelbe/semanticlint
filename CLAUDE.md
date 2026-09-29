@@ -69,6 +69,21 @@ principles are the acceptance bar for anything written from scratch — there's
 nothing to "tidy" in code that doesn't exist yet, but there's everything to
 get right the first time.
 
+A third, independent gate covers cyclomatic/cognitive complexity, invariant
+return, and duplicated string literal (`scripts/check_complexity_ratchet.py`,
+CI's `complexity` job): it fails a touched function/literal whose metric got
+worse than where the branch diverged. Same `Tidy-Exempt:` bypass. See
+`CRAFTSMANSHIP.md`'s "The complexity ratchet".
+
+**Write within these limits from the start**: CRAFTSMANSHIP.md's "The
+mechanical floor" table has the exact numbers `refactor-first`/`complexity`
+check (≤5 params, ≤50 statements, ≤12 branches, ≤7 instance attributes, ≤15
+cyclomatic/cognitive complexity, no repeated 5+ char literal more than twice
+per file, etc.) — know them while writing, not only when a gate flags
+something after the fact. Before calling a change done, run both locally
+against what you touched: `uv run scripts/craftcov.py --file <path>` and
+`uv run scripts/check_complexity_ratchet.py --base origin/master`.
+
 Touching code with no tests? It's legacy by Feathers' definition regardless
 of age — write a `test(characterize):` commit pinning its current behavior
 first, *then* tidy under that safety net. See `CRAFTSMANSHIP.md`'s "Working
