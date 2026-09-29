@@ -102,4 +102,4 @@ enhancement to add if/when those richer metrics are wanted; nothing depends on i
 - **Back-compatible by default** — default scope + scalar thresholds + empty
   select/ignore reproduce current behaviour on upgrade; snapshot-tested.
 - **TDD + BDD** — every phase ships its Gherkin features and unit tests first
-  (see `CLAUDE.md`).
+  (see `AGENTS.md`).
