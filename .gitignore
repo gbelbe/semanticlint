@@ -17,3 +17,4 @@ htmlcov/
 *.ttl.lock
 .DS_Store
 .idea
+coverage.xml

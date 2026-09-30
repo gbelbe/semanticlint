@@ -171,6 +171,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # patch-coverage below needs the base branch's history
 
       - uses: astral-sh/setup-uv@v5
 
@@ -194,6 +196,20 @@ jobs:
 
       - name: Coverage report
         run: uv run coverage report --fail-under=80
+
+      # craft-gate's patch-coverage gate — reuses the coverage.xml the unit-test
+      # step above already produced rather than a separate job re-running the
+      # whole suite (that job's own comment in ci-job.yml recommends exactly
+      # this when a coverage-generating job already exists). Diff-aware:
+      # the *changed* lines must be covered, not the repo's overall average
+      # (the "Coverage report" step above) — a well-tested old codebase can't
+      # carry an untested new file past this one.
+      - name: "Patch coverage: changed lines must be ≥ 90% covered"
+        if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+        run: |
+          uv run diff-cover coverage.xml \
+            --compare-branch "origin/${{ github.base_ref }}" \
+            --fail-under 90
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
