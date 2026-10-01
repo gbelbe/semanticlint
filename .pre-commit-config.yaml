@@ -1,0 +1,20 @@
+# Git hooks — run with prek (https://prek.j178.dev) or classic pre-commit.
+#   Install once:   prek install --hook-type pre-push
+#   Run manually:   bash scripts/check_tidy_ratchet.sh --base origin/master
+#
+# Tidy First discipline (see the tidy-first skill): every push must contain a
+# tidy(<type>): commit or a Tidy-Exempt: trailer since origin/master.
+# Text-only check on commit messages — no test run, so it costs milliseconds.
+
+default_install_hook_types: [pre-push]
+
+repos:
+  - repo: local
+    hooks:
+      - id: tidy-ratchet
+        name: "tidy ratchet (tidy(<type>): commit or Tidy-Exempt: trailer)"
+        entry: bash scripts/check_tidy_ratchet.sh --base origin/master
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

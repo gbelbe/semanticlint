@@ -7,6 +7,8 @@ dist/
 build/
 *.egg-info/
 .eggs/
+.craftcov_cache.json
+.craftcov_last_report.json
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -15,3 +17,4 @@ htmlcov/
 *.ttl.lock
 .DS_Store
 .idea
+coverage.xml

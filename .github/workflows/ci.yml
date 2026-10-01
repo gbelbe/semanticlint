@@ -7,12 +7,172 @@ on:
     branches: ["master"]
 
 jobs:
+  # Text-only check on commit messages — no deps to install, no build. Only
+  # meaningful against a PR's base branch.
+  tidy:
+    name: Tidy First ratchet
+    runs-on: ubuntu-latest
+    # Skips bot-authored PRs (dependabot, etc.) — see complexity job's comment.
+    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need the base branch and full commit history
+
+      - name: "Tidy First ratchet: a tidy(<type>) commit or Tidy-Exempt trailer"
+        run: bash scripts/check_tidy_ratchet.sh --base "origin/${{ github.base_ref }}"
+
+  # Mechanical companion to the ratchet above: for the 8 catalog heuristics
+  # craftCov can detect (scripts/craftcov.py --list-detectors), a touched
+  # .py file's total across them must go down (or stay at 0) vs. where the
+  # branch diverged from main. See CRAFTSMANSHIP.md's "Refactor First".
+  refactor-first:
+    name: Refactor First gate
+    runs-on: ubuntu-latest
+    # Skips bot-authored PRs (dependabot, etc.) — see complexity job's comment.
+    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv sync --extra craftcov
+        run: uv sync --extra craftcov
+
+      - name: "Refactor First: touched files' detectable-heuristic total must go down (or stay 0)"
+        run: uv run python3 scripts/check_refactor_first.py --base "origin/${{ github.base_ref }}"
+
+  # Independent of craftCov — own script, own catalog entries (CG032-
+  # CG035), own toolchain (radon, cognitive-complexity).
+  complexity:
+    name: Complexity ratchet
+    runs-on: ubuntu-latest
+    # Skips bot-authored PRs (dependabot, etc.): can't write a Tidy-Exempt:
+    # trailer, and a dependency bump has no complexity to fix.
+    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv sync --extra complexity
+        run: uv sync --extra complexity
+
+      - name: "Complexity ratchet: cyclomatic/cognitive complexity, invariant return, duplicated literal"
+        run: uv run python3 scripts/check_complexity_ratchet.py --base "origin/${{ github.base_ref }}"
+
+  # craft-gate's fifth default gate, on by default but a verified no-op
+  # without a [tool.mutmut] section (see the check step below) — not yet
+  # configured here, so this currently just confirms it stays a no-op
+  # every PR. See CRAFTSMANSHIP.md's "Mutation ratchet" before adding
+  # [tool.mutmut]: it reruns the whole test suite once per mutant.
+  mutation-ratchet:
+    name: Mutation ratchet
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for a [tool.mutmut] / [mutmut] config (this repo's opt-in)
+        id: configured
+        run: |
+          if grep -qE '^\[tool\.mutmut\]' pyproject.toml 2>/dev/null \
+             || grep -qE '^\[mutmut\]' setup.cfg 2>/dev/null; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "yes=false" >> "$GITHUB_OUTPUT"
+            echo "No [tool.mutmut] config found — skipping (see CRAFTSMANSHIP.md's 'Mutation ratchet' to opt in)."
+          fi
+
+      - uses: astral-sh/setup-uv@v5
+        if: steps.configured.outputs.yes == 'true'
+
+      - name: uv sync --extra mutation --extra dev
+        if: steps.configured.outputs.yes == 'true'
+        run: uv sync --extra mutation --extra dev
+
+      - name: Cache mutmut results
+        if: steps.configured.outputs.yes == 'true'
+        uses: actions/cache@v4
+        with:
+          path: mutants
+          key: mutmut-${{ runner.os }}-${{ hashFiles('**/*.py') }}
+          restore-keys: mutmut-${{ runner.os }}-
+
+      - name: mutmut run
+        if: steps.configured.outputs.yes == 'true'
+        run: uv run mutmut run
+
+      - name: "Mutation ratchet: touched functions' mutation score"
+        if: steps.configured.outputs.yes == 'true'
+        run: uv run python3 scripts/check_mutation_ratchet.py --base "origin/${{ github.base_ref }}" --threshold 80
+
+  # Reporting, not a gate — see DESIGN.md's Reporting section.
+  craftcov-pr-comment:
+    name: craftCov PR report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv sync --extra craftcov
+        run: uv sync --extra craftcov
+
+      - name: Post/update the craftCov PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          uv run python3 scripts/craftcov_pr_comment.py \
+            --base "origin/${{ github.base_ref }}" \
+            --repo "${{ github.repository }}" \
+            --pr "${{ github.event.pull_request.number }}"
+
+  # Reporting, not a gate. Public repo, so code scanning is
+  # available with no extra licensing.
+  craftcov-sarif:
+    name: Upload craftCov SARIF
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv sync --extra craftcov
+        run: uv sync --extra craftcov
+
+      - name: Generate craftCov SARIF
+        run: uv run python3 scripts/craftcov.py --format sarif --no-cache --no-diff > craftcov.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: craftcov.sarif
+          category: craftcov
+
   quality:
     name: Lint, type-check & test
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # patch-coverage below needs the base branch's history
 
       - uses: astral-sh/setup-uv@v5
 
@@ -36,6 +196,20 @@ jobs:
 
       - name: Coverage report
         run: uv run coverage report --fail-under=80
+
+      # craft-gate's patch-coverage gate — reuses the coverage.xml the unit-test
+      # step above already produced rather than a separate job re-running the
+      # whole suite (that job's own comment in ci-job.yml recommends exactly
+      # this when a coverage-generating job already exists). Diff-aware:
+      # the *changed* lines must be covered, not the repo's overall average
+      # (the "Coverage report" step above) — a well-tested old codebase can't
+      # carry an untested new file past this one.
+      - name: "Patch coverage: changed lines must be ≥ 90% covered"
+        if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+        run: |
+          uv run diff-cover coverage.xml \
+            --compare-branch "origin/${{ github.base_ref }}" \
+            --fail-under 90
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
