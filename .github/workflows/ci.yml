@@ -5,6 +5,9 @@ on:
     branches: ["master"]
   pull_request:
     branches: ["master"]
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
 
 jobs:
   # Text-only check on commit messages — no deps to install, no build. Only
@@ -65,53 +68,37 @@ jobs:
       - name: "Complexity ratchet: cyclomatic/cognitive complexity, invariant return, duplicated literal"
         run: uv run python3 scripts/check_complexity_ratchet.py --base "origin/${{ github.base_ref }}"
 
-  # craft-gate's fifth default gate, on by default but a verified no-op
-  # without a [tool.mutmut] section (see the check step below) — not yet
-  # configured here, so this currently just confirms it stays a no-op
-  # every PR. See CRAFTSMANSHIP.md's "Mutation ratchet" before adding
-  # [tool.mutmut]: it reruns the whole test suite once per mutant.
+  # Mutation ratchet runs on pull requests plus scheduled/manual fresh campaigns.
   mutation-ratchet:
     name: Mutation ratchet
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+    if: (github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')) || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check for a [tool.mutmut] / [mutmut] config (this repo's opt-in)
-        id: configured
-        run: |
-          if grep -qE '^\[tool\.mutmut\]' pyproject.toml 2>/dev/null \
-             || grep -qE '^\[mutmut\]' setup.cfg 2>/dev/null; then
-            echo "yes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "yes=false" >> "$GITHUB_OUTPUT"
-            echo "No [tool.mutmut] config found — skipping (see CRAFTSMANSHIP.md's 'Mutation ratchet' to opt in)."
-          fi
-
       - uses: astral-sh/setup-uv@v5
-        if: steps.configured.outputs.yes == 'true'
 
       - name: uv sync --extra mutation --extra dev
-        if: steps.configured.outputs.yes == 'true'
         run: uv sync --extra mutation --extra dev
 
       - name: Cache mutmut results
-        if: steps.configured.outputs.yes == 'true'
         uses: actions/cache@v4
         with:
           path: mutants
-          key: mutmut-${{ runner.os }}-${{ hashFiles('**/*.py') }}
+          key: mutmut-${{ runner.os }}-${{ hashFiles('**/*.py', 'pyproject.toml', 'uv.lock') }}
           restore-keys: mutmut-${{ runner.os }}-
 
+      - name: Force fresh mutation campaign on scheduled/manual runs
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: rm -rf mutants
+
       - name: mutmut run
-        if: steps.configured.outputs.yes == 'true'
         run: uv run mutmut run
 
       - name: "Mutation ratchet: touched functions' mutation score"
-        if: steps.configured.outputs.yes == 'true'
-        run: uv run python3 scripts/check_mutation_ratchet.py --base "origin/${{ github.base_ref }}" --threshold 80
+        run: uv run python3 scripts/check_mutation_ratchet.py --base "origin/${{ github.base_ref || 'master' }}" --threshold 80
 
   # Reporting, not a gate — see DESIGN.md's Reporting section.
   craftcov-pr-comment:

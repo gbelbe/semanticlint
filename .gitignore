@@ -9,6 +9,9 @@ build/
 .eggs/
 .craftcov_cache.json
 .craftcov_last_report.json
+craftcov-report.md
+craftcov.sarif
+mutants/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
