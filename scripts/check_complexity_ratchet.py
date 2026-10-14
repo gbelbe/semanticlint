@@ -47,6 +47,11 @@ is evaluated exactly like new code and must meet the threshold on its own,
 not compared against an identically-named entry that happened to live
 somewhere else in the base ref.
 
+A `Tidy-Exempt:` trailer in the commit range waives the debt rules above (a touched
+function must come out lower; a literal count must not grow), since an exempt change
+has no reason to be paying debt down. It does not waive the new-code rules: a function,
+invariant return or duplicated literal that did not exist at the base still fails.
+
 Needs the `complexity` extra (`radon`, `cognitive-complexity`) — see the
 README's Install section for the exact versions this release expects.
 
@@ -58,13 +63,50 @@ from __future__ import annotations
 
 import argparse
 import ast
-import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
+
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent)
+)  # siblings by bare name, also when imported as scripts.<name>
+from astfuncs import walk_functions  # noqa: E402
+from gate_config import (  # noqa: E402
+    COMPLEXITY,
+    ConfigError,
+    Waive,
+    find_root,
+    load_settings,
+    waive_from,
+)
+from gitdiff import has_tidy_exempt, touched_names  # noqa: E402
 
 THRESHOLD = 15
+
+
+def _new_function_message(name: str, cc: int, threshold: int, metric: str) -> str:
+    return (
+        f"{name}: new function with {metric} {cc} (> {threshold}) — "
+        f"keep new functions at or below {threshold}"
+    )
+
+
+def find_new_violations(
+    base_cc: dict[str, int],
+    head_cc: dict[str, int],
+    threshold: int = THRESHOLD,
+    metric: str = "complexity",
+) -> list[str]:
+    """Only the violations in code that did not exist at the base: a name over *threshold*
+    that *base_cc* has no entry for. New code has no legacy to grandfather, so a
+    `Tidy-Exempt:` trailer does not waive these."""
+    return [
+        _new_function_message(name, cc, threshold, metric)
+        for name, cc in sorted(head_cc.items())
+        if cc > threshold and name not in base_cc
+    ]
 
 
 def find_violations(
@@ -84,7 +126,7 @@ def find_violations(
     never be flagged.
 
     With *touched* (a set of names this change's diff actually reaches —
-    see `_touched_names`): a name in *touched* whose *cc* is still over
+    see `gitdiff.touched_names`): a name in *touched* whose *cc* is still over
     *threshold* must have strictly *decreased*, not just avoided
     increasing — matching every consuming repo's own written policy
     ("if your change touches an over-threshold function, bring its
@@ -98,10 +140,7 @@ def find_violations(
             continue
         base = base_cc.get(name, 0)
         if name not in base_cc:
-            violations.append(
-                f"{name}: new function with {metric} {cc} (> {threshold}) — "
-                f"keep new functions at or below {threshold}"
-            )
+            violations.append(_new_function_message(name, cc, threshold, metric))
         elif touched is not None and name in touched:
             if cc < base:
                 continue  # touched and genuinely improved — allowed
@@ -118,56 +157,6 @@ def find_violations(
             )
         # else: cc <= base, not known to be touched — grandfathered, allowed
     return violations
-
-
-def _changed_lines(base_ref: str, root: Path, rel_path: str) -> set[int]:
-    """Line numbers in *rel_path*'s current working-tree content that this
-    change added, modified, or deleted at, versus *base_ref* — via
-    `git diff -U0`.
-
-    Zero context means every hunk's "+" side is exactly the lines that
-    changed, nothing surrounding. A pure-deletion hunk reports a new-side
-    count of 0; its anchor line (the insertion point) is still counted as
-    touched, since deleting the last statement in a function is a change
-    *to* that function even though nothing was added.
-    """
-    out = subprocess.run(
-        ["git", "diff", "--no-color", "-U0", base_ref, "--", rel_path],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout
-    lines: set[int] = set()
-    for m in re.finditer(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", out, re.MULTILINE):
-        start = int(m.group(1))
-        count = int(m.group(2)) if m.group(2) is not None else 1
-        lines.update(range(start, start + count)) if count else lines.add(start)
-    return lines
-
-
-def _touched_names(root: Path, base_ref: str, ranges: dict[str, tuple[int, int]]) -> set[str]:
-    """Names from *ranges* (``<relpath>::<qualified name>`` → (lineno, endline))
-    whose line range overlaps a line this change touched in that file.
-
-    One `git diff` per file, not per function — cheap enough, and a file
-    with no diff at all (nothing in *ranges* here was touched) skips
-    straight past without running git at all.
-    """
-    by_file: dict[str, list[str]] = {}
-    for name in ranges:
-        by_file.setdefault(name.split("::", 1)[0], []).append(name)
-
-    touched: set[str] = set()
-    for file_rel, names in by_file.items():
-        changed = _changed_lines(base_ref, root, file_rel)
-        if not changed:
-            continue
-        for name in names:
-            start, end = ranges[name]
-            if any(start <= line <= end for line in changed):
-                touched.add(name)
-    return touched
 
 
 def _functions(blocks: object) -> list[object]:
@@ -205,7 +194,16 @@ def _discover_python_files(root: Path) -> list[Path]:
     """
     try:
         out = subprocess.run(
-            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "*.py"],
+            [
+                "git",
+                "-c",
+                "core.quotepath=false",
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "*.py",
+            ],
             cwd=root,
             capture_output=True,
             text=True,
@@ -248,22 +246,6 @@ def compute_complexity(root: Path, threshold: int = THRESHOLD) -> dict[str, int]
 # actually rejected, which it scored 17 and 17.
 
 
-def _qualified(stack: list[str], name: str) -> str:
-    return ".".join([*stack, name])
-
-
-def _walk_functions(node: ast.AST, stack: list[str]):
-    """Every function in *node*, with the qualified name it should be reported under."""
-    for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.ClassDef):
-            yield from _walk_functions(child, [*stack, child.name])
-        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            yield _qualified(stack, child.name), child
-            yield from _walk_functions(child, [*stack, child.name])
-        else:
-            yield from _walk_functions(child, stack)
-
-
 def compute_cognitive_ranges(root: Path) -> dict[str, tuple[int, int, int]]:
     """Map ``<relpath>::<qualified function name>`` → (cognitive complexity, lineno, endline)."""
     from cognitive_complexity.api import get_cognitive_complexity  # lazy, as above
@@ -275,7 +257,7 @@ def compute_cognitive_ranges(root: Path) -> dict[str, tuple[int, int, int]]:
         except (OSError, UnicodeDecodeError, SyntaxError):
             continue
         rel = path.relative_to(root).as_posix()
-        for name, node in _walk_functions(tree, []):
+        for name, node in walk_functions(tree, []):
             end = getattr(node, "end_lineno", node.lineno) or node.lineno
             result[f"{rel}::{name}"] = (get_cognitive_complexity(node), node.lineno, end)
     return result
@@ -338,7 +320,7 @@ def compute_invariant_returns(root: Path) -> dict[str, str]:
         except (OSError, UnicodeDecodeError, SyntaxError):
             continue
         rel = path.relative_to(root).as_posix()
-        for name, node in _walk_functions(tree, []):
+        for name, node in walk_functions(tree, []):
             returned = _returns_one_never_rebound_name(node)
             if returned is not None:
                 result[f"{rel}::{name}"] = returned
@@ -416,7 +398,7 @@ def compute_duplicate_literals(
 
 
 def _measure_at_ref(
-    ref: str, path: str
+    ref: str, path: str, min_length: int = DUPLICATE_LITERAL_MIN_LENGTH
 ) -> tuple[dict[str, int], dict[str, int], dict[str, str], dict[str, int]]:
     """Every metric for *path* as it exists at git *ref*, via a throwaway worktree.
 
@@ -449,7 +431,7 @@ def _measure_at_ref(
                 compute_complexity(root),
                 compute_cognitive(root),
                 compute_invariant_returns(root),
-                compute_duplicate_literals(root),
+                compute_duplicate_literals(root, min_length),
             )
         finally:
             subprocess.run(
@@ -458,20 +440,96 @@ def _measure_at_ref(
             )
 
 
-def has_tidy_exempt(base_ref: str) -> bool:
-    """True when a `Tidy-Exempt:` trailer appears anywhere in `base_ref..HEAD`.
+class Measures(NamedTuple):
+    """Every metric the ratchet compares, for one tree."""
 
-    Same bypass, same trailer, as check_tidy_ratchet.sh and
-    check_refactor_first.py — one exemption mechanism for every gate this
-    project ships, not a separate one per script.
+    cc: dict[str, int]
+    cog: dict[str, int]
+    inv: dict[str, str]
+    dup: dict[str, int]
+
+
+class Limits(NamedTuple):
+    """The numbers the ratchet holds code to; the defaults are what it always used."""
+
+    cyclomatic: int = THRESHOLD
+    cognitive: int = THRESHOLD
+    literal_occurrences: int = DUPLICATE_LITERAL_THRESHOLD
+    literal_min_length: int = DUPLICATE_LITERAL_MIN_LENGTH
+
+
+def limits_from(settings: dict[str, dict]) -> Limits:
+    section = settings[COMPLEXITY]
+    return Limits(
+        section["cyclomatic"],
+        section["cognitive"],
+        section["duplicated-literal-occurrences"],
+        section["duplicated-literal-min-length"],
+    )
+
+
+def collect_violations(
+    base: Measures,
+    head: Measures,
+    touched: tuple[set[str], set[str]],
+    waive: Waive,
+    limits: Limits = Limits(),  # noqa: B008
+) -> list[str]:
+    """Every violation of the ratchet, less what *waive* excuses.
+
+    The debt rules (a touched over-threshold function must come out lower, a literal count must
+    not grow) and the new-code rules (a new function over the threshold, a new invariant return,
+    a new duplicated literal) are waived separately, so a `Tidy-Exempt:` trailer can excuse one
+    without the other.
     """
-    out = subprocess.run(
-        ["git", "log", "--format=%B", f"{base_ref}..HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout
-    return any(line.startswith("Tidy-Exempt:") for line in out.splitlines())
+
+    def judge(old: dict[str, int], new: dict[str, int], **kwargs) -> list[str]:
+        everything = find_violations(old, new, **kwargs)
+        kwargs.pop("touched", None)
+        fresh = find_new_violations(old, new, **kwargs)
+        debt = [] if waive.legacy_debt else [v for v in everything if v not in fresh]
+        return debt + ([] if waive.new_code else fresh)
+
+    touched_cc, touched_cog = touched
+    violations = judge(
+        base.cc,
+        head.cc,
+        threshold=limits.cyclomatic,
+        metric="cyclomatic complexity",
+        touched=touched_cc,
+    )
+    violations += judge(
+        base.cog,
+        head.cog,
+        threshold=limits.cognitive,
+        metric="cognitive complexity",
+        touched=touched_cog,
+    )
+    # Grandfathered like the ratchet: an invariant return that was already there
+    # is not this change's problem, but a new one is.
+    if not waive.new_code:
+        violations += [
+            f"{name}: every return hands back the same never-rebound {returned!r} "
+            f"(SonarQube S3516) — use one exit, reached by break"
+            for name, returned in sorted(head.inv.items())
+            if name not in base.inv
+        ]
+    violations += judge(
+        base.dup,
+        head.dup,
+        threshold=limits.literal_occurrences - 1,
+        metric="duplicated string literal",
+    )
+    return violations
+
+
+def _waived(waive: Waive) -> str:
+    rules = [
+        name
+        for name, off in (("debt rules", waive.legacy_debt), ("new-code rules", waive.new_code))
+        if off
+    ]
+    return " and ".join(rules)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -480,19 +538,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--path", default=".", help="source directory to scan")
     args = parser.parse_args(argv)
 
-    if has_tidy_exempt(args.base):
-        print(f"Complexity ratchet: Tidy-Exempt: trailer found in {args.base}..HEAD — skipping.")
-        return 0
+    try:
+        settings = load_settings(find_root(Path.cwd()))
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    limits = limits_from(settings)
+    waive = waive_from(settings, has_tidy_exempt(args.base))
+    if waive.legacy_debt or waive.new_code:
+        print(
+            f"Complexity ratchet: Tidy-Exempt: trailer found in {args.base}..HEAD — "
+            f"waiving: {_waived(waive)}."
+        )
 
     root = Path(args.path)
     head_funcs = compute_functions(root)
-    head = {name: cc for name, (cc, _l, _e) in head_funcs.items()}
     head_cog_ranges = compute_cognitive_ranges(root)
-    head_cog = {name: cc for name, (cc, _l, _e) in head_cog_ranges.items()}
-    head_inv = compute_invariant_returns(root)
-    head_dup = compute_duplicate_literals(root)
+    head = Measures(
+        {name: cc for name, (cc, _l, _e) in head_funcs.items()},
+        {name: cc for name, (cc, _l, _e) in head_cog_ranges.items()},
+        compute_invariant_returns(root),
+        compute_duplicate_literals(root, limits.literal_min_length),
+    )
     try:
-        base, base_cog, base_inv, base_dup = _measure_at_ref(args.base, args.path)
+        base = Measures(*_measure_at_ref(args.base, args.path, limits.literal_min_length))
     except subprocess.CalledProcessError as exc:
         print(f"error: could not read base ref {args.base!r}: {exc.stderr or exc}", file=sys.stderr)
         return 2
@@ -502,35 +571,23 @@ def main(argv: list[str] | None = None) -> int:
     # Touched-and-still-over-threshold must decrease, not just not increase.
     cc_ranges = {n: (v[1], v[2]) for n, v in head_funcs.items()}
     cog_ranges = {n: (v[1], v[2]) for n, v in head_cog_ranges.items()}
-    touched_cc = _touched_names(root, args.base, cc_ranges)
-    touched_cog = _touched_names(root, args.base, cog_ranges)
-
-    violations = find_violations(base, head, metric="cyclomatic complexity", touched=touched_cc)
-    violations += find_violations(
-        base_cog, head_cog, metric="cognitive complexity", touched=touched_cog
-    )
-    # Grandfathered like the ratchet: an invariant return that was already there
-    # is not this change's problem, but a new one is.
-    violations += [
-        f"{name}: every return hands back the same never-rebound {returned!r} "
-        f"(SonarQube S3516) — use one exit, reached by break"
-        for name, returned in sorted(head_inv.items())
-        if name not in base_inv
-    ]
-    violations += find_violations(
-        base_dup,
-        head_dup,
-        threshold=DUPLICATE_LITERAL_THRESHOLD - 1,
-        metric="duplicated string literal",
+    touched = (
+        touched_names(root, args.base, cc_ranges),
+        touched_names(root, args.base, cog_ranges),
     )
 
+    violations = collect_violations(base, head, touched, waive, limits)
     if violations:
         print(f"Complexity ratchet: {len(violations)} violation(s):", file=sys.stderr)
         for v in violations:
             print(f"  - {v}", file=sys.stderr)
         return 1
 
-    print(f"Complexity ratchet: OK (cyclomatic, cognitive ≤ {THRESHOLD}; no S1192 duplication).")
+    print(
+        f"Complexity ratchet: OK (cyclomatic ≤ {limits.cyclomatic}, "
+        f"cognitive ≤ {limits.cognitive}; "
+        f"no literal repeated {limits.literal_occurrences}+ times)."
+    )
     return 0
 
 
