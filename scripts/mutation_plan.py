@@ -601,6 +601,8 @@ def summary(decided: Plan) -> str:
             f"  {len(decided.reset_functions)} function(s) to re-test, "
             f"{len(decided.stale_tests)} test(s) to re-measure"
         )
+        if decided.selection_added:
+            lines.append(f"  new test file(s): {', '.join(decided.selection_added)}")
     return "\n".join(lines)
 
 
