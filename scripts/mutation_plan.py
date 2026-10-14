@@ -71,7 +71,25 @@ FULL_RERUN_SECTIONS = (
     "tool.pytest",
     "tool.mutmut.pytest_add_cli_args",
 )
+_RENAME_PATHS = 2  # `git diff --name-status` names a rename as old<TAB>new
+_PASSES = 2  # plan and run once, and once more when new tests had to be measured first
 _SELECTION_KEY = "tool.mutmut.pytest_add_cli_args_test_selection"
+
+
+@dataclass(frozen=True)
+class Selection:
+    """The test files in mutmut's selection, now and at the base ref."""
+
+    now: tuple[str, ...]
+    before: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ImportGraph:
+    """Who imports whom among the repo's own modules, and what each selected test file imports."""
+
+    imports: dict[str, set[str]] = field(default_factory=dict)  # module -> repo modules it imports
+    tests: dict[str, set[str]] = field(default_factory=dict)  # test file -> modules it imports
 
 
 @dataclass(frozen=True)
@@ -80,16 +98,11 @@ class Inputs:
 
     changes: tuple[tuple[str, str], ...]  # (status A/M/D, repo-relative path)
     mutated_files: frozenset[str]  # files mutmut mutates
-    selection: tuple[str, ...]  # test files in the mutation selection now
-    old_selection: tuple[str, ...]  # ... at the base ref
+    selection: Selection
     stats: dict | None  # mutants/mutmut-stats.json, None when there is no cache
     sources: dict[str, str] = field(default_factory=dict)  # path -> text, tests and mutated files
     changed_sections: tuple[str, ...] = ()  # pyproject sections that differ from the base
-    all_modules: frozenset[str] = frozenset()  # dotted names of the repo's own modules
-    imports: dict[str, set[str]] = field(default_factory=dict)  # module -> repo modules it imports
-    test_modules: dict[str, set[str]] = field(
-        default_factory=dict
-    )  # test file -> modules it imports
+    graph: ImportGraph = field(default_factory=ImportGraph)
 
 
 @dataclass(frozen=True)
@@ -161,9 +174,9 @@ def _incremental(inputs: Inputs) -> Plan:
     stats = inputs.stats or {}
     by_function: dict[str, list[str]] = stats.get("tests_by_mangled_function_name", {})
     known = set(stats.get("duration_by_test", {})).union(*map(set, by_function.values()))
-    selected = set(inputs.selection)
-    removed = set(inputs.old_selection) - selected
-    added = tuple(sorted(selected - set(inputs.old_selection)))
+    selected = set(inputs.selection.now)
+    removed = set(inputs.selection.before) - selected
+    added = tuple(sorted(selected - set(inputs.selection.before)))
     ctx = _Context(inputs, known, selected, removed)
 
     domain = _Domain()
@@ -220,7 +233,7 @@ def _support_tests(inputs: Inputs, path: str, known_tests: set[str]) -> set[str]
     if name.endswith(".py"):
         files = _files_importing(inputs, path)
     else:
-        files = {f for f in inputs.selection if name in inputs.sources.get(f, "")}
+        files = {f for f in inputs.selection.now if name in inputs.sources.get(f, "")}
         files = files or _nearest_test_files(inputs, directory)
     return {t for t in known_tests if t.split("::", 1)[0] in files}
 
@@ -229,7 +242,7 @@ def _files_importing(inputs: Inputs, path: str) -> set[str]:
     stem = path.rsplit("/", 1)[-1][: -len(".py")]
     dotted = path[: -len(".py")].replace("/", ".")
     found = set()
-    for test_file in inputs.selection:
+    for test_file in inputs.selection.now:
         for module in _imported_names(inputs.sources.get(test_file, "")):
             if module in (stem, dotted) or module.endswith(f".{stem}"):
                 found.add(test_file)
@@ -255,10 +268,10 @@ def _nearest_test_files(inputs: Inputs, directory: str) -> set[str]:
     parts = directory.split("/")
     for depth in range(len(parts), 0, -1):
         prefix = "/".join(parts[:depth]) + "/"
-        near = {f for f in inputs.selection if f.startswith(prefix)}
+        near = {f for f in inputs.selection.now if f.startswith(prefix)}
         if near:
             return near
-    return set(inputs.selection)
+    return set(inputs.selection.now)
 
 
 def _module_of(path: str) -> str:
@@ -269,7 +282,7 @@ def _module_of(path: str) -> str:
 def _dependent_tests(inputs: Inputs, path: str, known_tests: set[str]) -> set[str]:
     """Tests whose imports lead, directly or not, to the changed unmutated module."""
     reverse: dict[str, set[str]] = {}
-    for module, imported in inputs.imports.items():
+    for module, imported in inputs.graph.imports.items():
         for target in imported:
             reverse.setdefault(target, set()).add(module)
     start = _module_of(path)
@@ -279,7 +292,7 @@ def _dependent_tests(inputs: Inputs, path: str, known_tests: set[str]) -> set[st
             if importer not in reached:
                 reached.add(importer)
                 queue.append(importer)
-    files = {f for f, modules in inputs.test_modules.items() if reached & modules}
+    files = {f for f, modules in inputs.graph.tests.items() if reached & modules}
     return {t for t in known_tests if t.split("::", 1)[0] in files}
 
 
@@ -352,7 +365,7 @@ def read_changes(root: Path, base: str) -> tuple[tuple[str, str], ...]:
     changes = []
     for line in _git(root, "diff", "--name-status", "-M", base, "--").splitlines():
         status, *paths = line.split("\t")
-        if status.startswith("R") and len(paths) == 2:
+        if status.startswith("R") and len(paths) == _RENAME_PATHS:
             changes += [("D", paths[0]), ("A", paths[1])]
         elif paths:
             changes.append((status[0], paths[0]))
@@ -458,14 +471,11 @@ def collect_inputs(root: Path, base: str, mutants_dir: Path) -> tuple[Inputs, li
     inputs = Inputs(
         changes=read_changes(root, base),
         mutated_files=mutated,
-        selection=selection,
-        old_selection=selection_files(old_doc) if old_doc else selection,
+        selection=Selection(selection, selection_files(old_doc) if old_doc else selection),
         stats=stats,
         sources=sources,
         changed_sections=changed_sections(old_doc, new_doc) if old_doc else (),
-        all_modules=frozenset(graph),
-        imports=graph,
-        test_modules={f: by_file.get(f, set()) for f in selection},
+        graph=ImportGraph(graph, {f: by_file.get(f, set()) for f in selection}),
     )
     return (
         inputs,
@@ -570,7 +580,7 @@ def run(root: Path, base: str, mutants_dir: Path) -> int:
     Anything unexpected in planning falls back to the campaign mutmut would have run anyway: a
     wrong plan must cost time, never a wrong verdict.
     """
-    for attempt in (1, 2):
+    for attempt in range(1, _PASSES + 1):
         try:
             decided = _prepare(root, base, mutants_dir, attempt)
         except Exception as exc:  # noqa: BLE001 - any failure here means "run in full"
@@ -578,7 +588,7 @@ def run(root: Path, base: str, mutants_dir: Path) -> int:
             shutil.rmtree(mutants_dir, ignore_errors=True)
             return _mutmut_run(root)
         code = _mutmut_run(root)
-        if code != 0 or not decided.needs_second_pass or attempt == 2:
+        if code != 0 or not decided.needs_second_pass or attempt == _PASSES:
             return code
     return 0
 

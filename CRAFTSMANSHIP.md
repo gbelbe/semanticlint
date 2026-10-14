@@ -369,8 +369,8 @@ here forces anyone to go looking for complexity to fix in code nobody's
 touching.
 
 ```bash
-uv sync --extra complexity                                    # radon + cognitive-complexity
-uv run python3 scripts/check_complexity_ratchet.py --base origin/main
+uv run --with-requirements scripts/gate-requirements.txt \
+  python3 scripts/check_complexity_ratchet.py --base origin/main    # radon + cognitive-complexity
 ```
 
 Wired into CI as the `complexity` job, PR-only, alongside `tidy` and
@@ -428,9 +428,9 @@ fails when a function **this change's diff touches** has a mutation score
 (killed / (killed + survived), mutmut's own metric) below `--threshold`.
 
 ```bash
-uv sync --extra mutation                                      # mutmut
-uv run mutmut run                                              # generates + runs mutants
-uv run python3 scripts/check_mutation_ratchet.py --base origin/main --threshold 80
+T="--with-requirements scripts/gate-requirements.txt"            # mutmut is pinned there
+uv run $T mutmut run                                           # generates + runs mutants
+uv run $T python3 scripts/check_mutation_ratchet.py --base origin/main --threshold 80
 ```
 
 **One of the five default gates (`templates/ci-job.yml`).** Mutation testing

@@ -21,9 +21,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-uv run python scripts/check_complexity_ratchet.py --path . --base "$BASE"
+uv run --with-requirements scripts/gate-requirements.txt python scripts/check_complexity_ratchet.py --path . --base "$BASE"
 bash scripts/check_tidy_ratchet.sh --base "$BASE"
-uv run python scripts/check_refactor_first.py --base "$BASE"
+uv run --with-requirements scripts/gate-requirements.txt python scripts/check_refactor_first.py --base "$BASE"
 
 # Whether a test gate applies here is scripts/gate_config.py's call (pyproject.toml's
 # [tool.craft-gate]); a misconfigured gate stops the run, a deliberate opt-out is reported.
@@ -50,7 +50,7 @@ if [[ $FAST -eq 0 ]]; then
   if gate_runs patch-coverage; then
     set -f
     # shellcheck disable=SC2046,SC2086  # the exclude list is split on purpose, and not globbed
-    uv run diff-cover coverage.xml --compare-branch "$BASE" \
+    uv run --with-requirements scripts/gate-requirements.txt diff-cover coverage.xml --compare-branch "$BASE" \
       --fail-under "$(gate_setting threshold)" $(exclude_args)
     set +f
   fi
@@ -58,21 +58,20 @@ if [[ $FAST -eq 0 ]]; then
     paths="$(gate_setting paths)"
     threshold="$(gate_setting threshold)"
     # shellcheck disable=SC2086  # paths is a space-separated list
-    uv run pytest $paths --cov --cov-report=xml:coverage-bdd.xml
+    uv run --with-requirements scripts/gate-requirements.txt pytest $paths --cov --cov-report=xml:coverage-bdd.xml
     set -f
     # shellcheck disable=SC2046,SC2086  # the exclude list is split on purpose, and not globbed
-    uv run diff-cover coverage-bdd.xml --compare-branch "$BASE" \
+    uv run --with-requirements scripts/gate-requirements.txt diff-cover coverage-bdd.xml --compare-branch "$BASE" \
       --fail-under "$threshold" $(exclude_args)
     set +f
   fi
-  changed_python=$(git diff --name-only "$BASE"...HEAD -- \
-    'ster/**/*.py' 'src/**/*.py' 'lib/**/*.py' 'tests/**/*.py' '*.py' || true)
+  changed_python=$(git diff --name-only "$BASE"...HEAD -- '*.py' || true)
   if gate_runs mutation; then
     if [[ "$MUTATION" == on || -n "$changed_python" ]]; then
       threshold="$(gate_setting threshold)"
       improvement="$(gate_setting improvement)"
-      uv run python scripts/mutation_plan.py run --base "$BASE"
-      uv run python scripts/check_mutation_ratchet.py --base "$BASE" \
+      uv run --with-requirements scripts/gate-requirements.txt python scripts/mutation_plan.py run --base "$BASE"
+      uv run --with-requirements scripts/gate-requirements.txt python scripts/check_mutation_ratchet.py --base "$BASE" \
         --threshold "$threshold" --improvement "$improvement"
     else
       echo "mutation ratchet: skipped (no Python production or test changes)"
@@ -81,8 +80,8 @@ if [[ $FAST -eq 0 ]]; then
 fi
 
 echo "--- thresholds loosened (advisory; a person decides) ---"
-uv run python scripts/config_loosening.py --base "$BASE"
+uv run --with-requirements scripts/gate-requirements.txt python scripts/config_loosening.py --base "$BASE"
 echo "--- design review (advisory; nothing here fails the run) ---"
-uv run python scripts/design_review.py --base "$BASE"
-uv run python scripts/craftcov_pr_comment.py --base "$BASE" --dry-run > craftcov-report.md
-uv run python scripts/craftcov.py --format sarif --no-cache --no-diff > craftcov.sarif
+uv run --with-requirements scripts/gate-requirements.txt python scripts/design_review.py --base "$BASE"
+uv run --with-requirements scripts/gate-requirements.txt python scripts/craftcov_pr_comment.py --base "$BASE" --dry-run > craftcov-report.md
+uv run --with-requirements scripts/gate-requirements.txt python scripts/craftcov.py --format sarif --no-cache --no-diff > craftcov.sarif

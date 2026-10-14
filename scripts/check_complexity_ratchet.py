@@ -180,8 +180,7 @@ def _discover_python_files(root: Path) -> list[Path]:
     the case this ratchet needs to catch, not skip.
 
     Not `root.rglob("*.py")`: with `--path` defaulting to `.` (the whole
-    repo, not a pre-scoped source subdirectory the way kai-ster's own
-    `--path ster` happened to be), an unfiltered rglob walks straight into
+    repo, not a pre-scoped source subdirectory), an unfiltered rglob walks straight into
     `.venv/`/`node_modules/`/caches and reports hundreds of violations in
     vendored code that was never this repo's to fix.
 
