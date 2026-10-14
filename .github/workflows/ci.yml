@@ -80,10 +80,16 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
 
+      - name: Is the mutation ratchet on for this repo?
+        id: gate
+        run: python3 scripts/gate_config.py mutation
+
       - name: uv sync --extra mutation --extra dev
+        if: steps.gate.outputs.status == 'run'
         run: uv sync --extra mutation --extra dev
 
       - name: Cache mutmut results
+        if: steps.gate.outputs.status == 'run'
         uses: actions/cache@v4
         with:
           path: mutants
@@ -94,11 +100,54 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: rm -rf mutants
 
-      - name: mutmut run
-        run: uv run mutmut run
+      # A full campaign on first initialisation and on the few cache-wide causes (a lock file, the dependency
+      # list, pytest's arguments, the root conftest); otherwise only what the diff can have changed.
+      - name: mutmut run (diff-scoped)
+        if: steps.gate.outputs.status == 'run'
+        run: uv run python3 scripts/mutation_plan.py run --base "origin/${{ github.base_ref || 'master' }}"
 
       - name: "Mutation ratchet: touched functions' mutation score"
-        run: uv run python3 scripts/check_mutation_ratchet.py --base "origin/${{ github.base_ref || 'master' }}" --threshold 80
+        if: steps.gate.outputs.status == 'run'
+        run: >
+          uv run python3 scripts/check_mutation_ratchet.py
+          --base "origin/${{ github.base_ref || 'master' }}"
+          --threshold ${{ steps.gate.outputs.threshold }}
+          --improvement ${{ steps.gate.outputs.improvement }}
+
+  # Runs only the scenarios and applies diff-cover to that report: every line the diff changed must be
+  # exercised by a scenario, not only by a unit test. On unless declared off in pyproject.toml's
+  # [tool.craft-gate.bdd] (see CRAFTSMANSHIP.md, "Test gates").
+  behaviour-coverage:
+    name: Behaviour coverage (Gherkin)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Is this gate on for this repo?
+        id: gate
+        run: python3 scripts/gate_config.py bdd
+
+      - name: uv sync --extra dev
+        if: steps.gate.outputs.status == 'run'
+        run: uv sync --extra dev
+
+      - name: Run the behaviour tests with coverage
+        if: steps.gate.outputs.status == 'run'
+        run: uv run pytest ${{ steps.gate.outputs.paths }} --cov --cov-report=xml:coverage-bdd.xml
+
+      - name: "Behaviour coverage: changed lines must be covered by scenarios"
+        if: steps.gate.outputs.status == 'run'
+        run: |
+          set -f   # the exclude globs are for diff-cover, not for this shell
+          uv run diff-cover coverage-bdd.xml \
+            --compare-branch "origin/${{ github.base_ref }}" \
+            --fail-under ${{ steps.gate.outputs.threshold }} \
+            ${{ steps.gate.outputs.exclude && format('--exclude {0}', steps.gate.outputs.exclude) || '' }}
 
   # Reporting, not a gate — see DESIGN.md's Reporting section.
   craftcov-pr-comment:
@@ -191,12 +240,19 @@ jobs:
       # the *changed* lines must be covered, not the repo's overall average
       # (the "Coverage report" step above) — a well-tested old codebase can't
       # carry an untested new file past this one.
-      - name: "Patch coverage: changed lines must be ≥ 90% covered"
+      - name: Is patch coverage on for this repo?
+        id: patch-gate
         if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')
+        run: python3 scripts/gate_config.py patch-coverage
+
+      - name: Patch coverage - changed lines must be covered
+        if: github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]') && steps.patch-gate.outputs.status == 'run'
         run: |
+          set -f   # the exclude globs are for diff-cover, not for this shell
           uv run diff-cover coverage.xml \
             --compare-branch "origin/${{ github.base_ref }}" \
-            --fail-under 90
+            --fail-under ${{ steps.patch-gate.outputs.threshold }} \
+            ${{ steps.patch-gate.outputs.exclude && format('--exclude {0}', steps.patch-gate.outputs.exclude) || '' }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
