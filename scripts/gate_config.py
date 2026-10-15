@@ -77,6 +77,9 @@ MINIMUMS = {  # the smallest sensible value of each count; below it the gate wou
     "max-lines": 1,
 }
 NEEDS_COVERAGE = (MUTATION, BDD)
+MARKER = "mutation"
+MARKER_USE = f"pytest.mark.{MARKER}"
+SELECTION_KEY = "pytest_add_cli_args_test_selection"
 _PRUNED_DIRS = {".git", ".venv", "venv", "node_modules", "site-packages", "build", "dist", ".tox"}
 _PERCENT_MAX = 100
 _SOURCE = re.compile(r"[\w./-]*")  # a package or directory name, as --cov takes it
@@ -218,6 +221,51 @@ def _has_features(root: Path, paths: list[str]) -> bool:
     return any(next((root / p).rglob("*.feature"), None) for p in paths if (root / p).is_dir())
 
 
+def _registered_markers(root: Path, tool: dict[str, Any]) -> str:
+    """Everywhere pytest can learn a marker, as one text: pyproject, the ini files, conftest."""
+    options = tool.get("pytest", {}).get("ini_options", {})
+    parts = [" ".join(map(str, options.get("markers", [])))]
+    for name in ("pytest.ini", "tox.ini", "setup.cfg", "conftest.py", "tests/conftest.py"):
+        if (root / name).is_file():
+            parts.append((root / name).read_text(errors="replace"))
+    return "\n".join(parts)
+
+
+def _is_test_file(name: str) -> bool:
+    """pytest's own default: test_*.py or *_test.py. Other files may merely mention the marker."""
+    return name.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py"))
+
+
+def _marked_files(root: Path) -> set[str]:
+    """Test files that carry @pytest.mark.mutation, as repo-relative posix paths."""
+    found = set()
+    for directory, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in _PRUNED_DIRS]
+        for name in files:
+            path = Path(directory) / name
+            if _is_test_file(name) and MARKER_USE in path.read_text(errors="replace"):
+                found.add(path.relative_to(root).as_posix())
+    return found
+
+
+def _selection_problem(root: Path, tool: dict[str, Any]) -> str | None:
+    """What disagrees between mutmut's test selection and the `mutation` marker, if anything."""
+    args = [str(a) for a in tool.get("mutmut", {}).get(SELECTION_KEY, [])]
+    files = {a for a in args if a.endswith(".py")}
+    uses_marker = "-m" in args and MARKER in args
+    if uses_marker and f"{MARKER}:" not in _registered_markers(root, tool):
+        return f"-m {MARKER} is selected but the marker is not registered (add it to markers)"
+    gone = sorted(f for f in files if not (root / f).is_file())
+    if gone:
+        return f"{SELECTION_KEY} names file(s) that do not exist: {', '.join(gone)}"
+    orphans = sorted(_marked_files(root) - files) if uses_marker else []
+    if orphans:
+        return (
+            f"@pytest.mark.{MARKER} in file(s) missing from {SELECTION_KEY}: {', '.join(orphans)}"
+        )
+    return None
+
+
 def _missing(gate: str, root: Path, settings: dict[str, Any], tool: dict[str, Any]) -> str | None:
     """What the gate needs and the repo lacks, as an instruction; None when it has it."""
     optout = f"or set [tool.{TABLE}.{gate}] enabled = false with a reason"
@@ -225,6 +273,8 @@ def _missing(gate: str, root: Path, settings: dict[str, Any], tool: dict[str, An
         return f"no pytest suite found; add tests, {optout}"
     if gate == MUTATION and "mutmut" not in tool:
         return f"[tool.mutmut] is missing from pyproject.toml; configure mutmut, {optout}"
+    if gate == MUTATION and (problem := _selection_problem(root, tool)):
+        return f"{problem}; fix the selection, {optout}"
     if gate == BDD and not _has_features(root, settings[PATHS]):
         return f"no .feature files under {', '.join(settings['paths'])}; add scenarios, {optout}"
     return None

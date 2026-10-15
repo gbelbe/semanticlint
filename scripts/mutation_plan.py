@@ -48,6 +48,11 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent)
+)  # siblings by bare name, also when imported as scripts.<name>
+from gate_timing import step  # noqa: E402
+
 try:  # Python 3.11+; older interpreters fall back to a full run rather than guessing
     import tomllib
 except ImportError:  # pragma: no cover - exercised only on 3.10
@@ -562,15 +567,17 @@ def _mutmut_run(root: Path) -> int:
 
 def _prepare(root: Path, base: str, mutants_dir: Path, attempt: int) -> Plan:
     """Decide, then leave the cache ready for a plain `mutmut run`."""
-    inputs, old_args, new_args = collect_inputs(root, base, mutants_dir)
-    decided = plan(inputs)
+    with step("mutation plan: read the repo and decide"):
+        inputs, old_args, new_args = collect_inputs(root, base, mutants_dir)
+        decided = plan(inputs)
     print(summary(decided))
-    if decided.mode == "full" and mutants_dir.exists():
-        shutil.rmtree(mutants_dir)
-    elif decided.mode == "incremental":
-        dropped = apply(decided, mutants_dir, old_args, new_args)
-        print(f"dropped {dropped} cached verdict(s)")
-        record_domain(mutants_dir, decided.reset_functions, fresh=attempt == 1)
+    with step(f"mutation plan: prepare the cache ({decided.mode})"):
+        if decided.mode == "full" and mutants_dir.exists():
+            shutil.rmtree(mutants_dir)
+        elif decided.mode == "incremental":
+            dropped = apply(decided, mutants_dir, old_args, new_args)
+            print(f"dropped {dropped} cached verdict(s)")
+            record_domain(mutants_dir, decided.reset_functions, fresh=attempt == 1)
     return decided
 
 
@@ -587,7 +594,8 @@ def run(root: Path, base: str, mutants_dir: Path) -> int:
             print(f"mutation plan failed ({exc!r}): running in full", file=sys.stderr)
             shutil.rmtree(mutants_dir, ignore_errors=True)
             return _mutmut_run(root)
-        code = _mutmut_run(root)
+        with step(f"mutmut run (pass {attempt})"):
+            code = _mutmut_run(root)
         if code != 0 or not decided.needs_second_pass or attempt == _PASSES:
             return code
     return 0

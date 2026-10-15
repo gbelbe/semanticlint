@@ -73,6 +73,8 @@ jobs:
     name: Mutation ratchet
     runs-on: ubuntu-latest
     if: (github.event_name == 'pull_request' && !endsWith(github.actor, '[bot]')) || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      CRAFT_GATE_TIMINGS: gate-timings.jsonl   # scripts/gate_timing.py appends each stage's duration here
     steps:
       - uses: actions/checkout@v4
         with:
@@ -117,6 +119,14 @@ jobs:
   # Runs only the scenarios and applies diff-cover to that report: every line the diff changed must be
   # exercised by a scenario, not only by a unit test. On unless declared off in pyproject.toml's
   # [tool.craft-gate.bdd] (see CRAFTSMANSHIP.md, "Test gates").
+
+      # Where the time went: the planner's stages, then the tests that make every mutant slow.
+      - name: Where the mutation time went
+        if: always() && steps.gate.outputs.status == 'run'
+        run: |
+          { python3 scripts/gate_timing.py report "$CRAFT_GATE_TIMINGS"
+            echo
+            python3 scripts/gate_timing.py mutants; } >> "$GITHUB_STEP_SUMMARY"
   behaviour-coverage:
     name: Behaviour coverage (Gherkin)
     runs-on: ubuntu-latest
