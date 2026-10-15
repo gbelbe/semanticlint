@@ -78,7 +78,7 @@ Small, purely structural moves: they don't change behavior, so a tidying
 commit's test results must be identical before and after.
 
 <!-- BEGIN GENERATED: tidying -->
-<!-- Generated from catalog.yaml by scripts/render_catalog.py — don't
+<!-- Generated from catalog.yaml by tools/render_catalog.py — don't
      hand-edit this table; edit catalog.yaml and run that script instead.
      See CONTRIBUTING.md. -->
 | Code | id | Name | Smell / when to reach for it | What it does |
@@ -107,7 +107,7 @@ problems and their standard fixes. They apply to existing code you're about
 to touch *and* are worth watching for while writing new code.
 
 <!-- BEGIN GENERATED: smell-fix -->
-<!-- Generated from catalog.yaml by scripts/render_catalog.py — don't
+<!-- Generated from catalog.yaml by tools/render_catalog.py — don't
      hand-edit this table; edit catalog.yaml and run that script instead.
      See CONTRIBUTING.md. -->
 | Code | id | Name (smell) | Smell / when to reach for it | What it does |
@@ -141,19 +141,19 @@ should look like it.
 
 Design checklist, not a commit ritual — apply while writing, not after.
 
-- **A function does one thing, and stays small.** If you're reaching for
+- **A function does one thing, and stays small** (CG025). If you're reaching for
   "and" to describe what it does, it's two functions.
-- **Prefer 0–2 arguments; 3 is a smell, more needs restructuring.** Stricter
+- **Prefer 0–2 arguments; 3 is a smell, more needs restructuring** (CG026). Stricter
   than the mechanical gate below (which allows up to 5) on purpose — this is
   the *design* bar, the gate is the *floor* it won't let you fall under.
   Often `introduce-parameter-object` (above) is the fix, before the function
   is even written.
 - **No flag arguments.** A boolean parameter that makes a function silently
   do one of two different things should be two functions.
-- **Command-Query Separation.** A function either does something or answers
+- **Command-Query Separation** (CG027). A function either does something or answers
   something — never both. A function named `getX` that also mutates state
   will surprise every caller that doesn't read its body.
-- **SOLID** (Martin, *Agile Software Development*, 2002) — most relevant day
+- **SOLID** (CG028; Martin, *Agile Software Development*, 2002) — most relevant day
   to day: **Dependency Inversion** (isolate an external library behind a
   thin internal adapter — the rest of the code depends on your interface,
   not the library) and **Single Responsibility** (one reason to change,
@@ -161,7 +161,7 @@ Design checklist, not a commit ritual — apply while writing, not after.
 
 ### The bar for new code — Kent Beck, *Extreme Programming Explained* (1999/2004)
 
-Beck's four rules of simple design, **in priority order** — when they
+Beck's four rules of simple design (CG029), **in priority order** — when they
 conflict, an earlier rule wins:
 
 1. Passes all the tests.
@@ -171,8 +171,8 @@ conflict, an earlier rule wins:
 
 ### A stricter optional reference — Sandi Metz's rules
 
-Deliberately extreme, meant to provoke a conversation rather than be taken
-literally: classes ≤100 lines, methods ≤5 lines, ≤4 parameters. Useful when
+Sandi Metz's rules (CG030) are deliberately extreme, meant to provoke a
+conversation rather than be taken literally: classes ≤100 lines, methods ≤5 lines, ≤4 parameters. Useful when
 a project's own complexity ceiling feels too permissive and the team wants a
 sharper target to aim for — not a gate.
 
@@ -218,7 +218,8 @@ cheaper and faster than finding out from a failed push.
 Feathers' definition: **legacy code is code without tests** — age is
 irrelevant. Untested code can't be tidied safely the normal way, because
 "confirm the existing tests are unchanged" (the whole point of a structural
-commit) has nothing to confirm against.
+commit) has nothing to confirm against. The characterization test (CG031)
+is how you build that safety net first.
 
 The procedure, step by step:
 
@@ -287,9 +288,9 @@ that the discipline (or an explicit, reviewable exemption) was followed.
 ## Refactor First — a mechanically-enforced instance of the procedure above
 
 For any heuristic craftCov can detect (see DESIGN.md's craftCov section, or
-`scripts/craftcov.py --list-detectors` — 8 of the 35 entries above as of
-this writing), the "which tidying, ask the developer" judgment call in step
-3 of the procedure becomes fully mechanical instead:
+`scripts/craftcov.py --list-detectors` — <!-- fact:detectable -->8<!-- /fact --> of the
+<!-- fact:entries -->35<!-- /fact --> entries above), the "which tidying, ask the developer"
+judgment call in step 3 of the procedure becomes fully mechanical instead:
 
 1. Before touching file `F`, scope craftCov to it:
    `uv run python3 scripts/craftcov.py --file <F>`.
@@ -321,18 +322,20 @@ spirit as the rest of this catalog.
 
 **Enforced, not just documented.** `scripts/check_refactor_first.py` (wired
 into CI as the `refactor-first` job, PR-only) fails a PR when a touched
-`.py` file's *total* across the 8 detectable heuristics didn't go down
+`.py` file's *total* across the <!-- fact:detectable -->8<!-- /fact --> detectable heuristics didn't go down
 relative to where the branch diverged from its base — or, if the file was
 already at 0, went up at all. It re-scans the PR's merge-base tree and its
 head tree and compares per file (`dupes` needs every file scanned at each
 point to find a match's other half, so there's no cheaper way to get an
-accurate "before" count for one file). `Tidy-Exempt:` bypasses it the same
-way it bypasses the message-pattern ratchet below — one exemption
-mechanism, not two.
+accurate "before" count for one file). `Tidy-Exempt:` waives this per-file
+ratchet, as it satisfies the message-pattern ratchet below, because an exempt change has
+nothing to tidy. It does not waive the **new-code rule**: the gate also fails any finding
+on a line the change added or rewrote (a new file must scan clean), since new code has no
+legacy to grandfather.
 
-This only covers the 8 craftCov-detectable heuristics. Four more (CG032-
+This only covers the <!-- fact:detectable -->8<!-- /fact --> craftCov-detectable heuristics. Four more (CG032-
 CG035) have their own separate mechanical gate — see "The complexity
-ratchet" below. The remaining 23 keep the judgment-call procedure above,
+ratchet" below. The remaining entries keep the judgment-call procedure above,
 backed only by the message-pattern ratchet below, not a count-based gate.
 
 ## The complexity ratchet — cyclomatic, cognitive, invariant return, duplicated literal
@@ -366,13 +369,14 @@ here forces anyone to go looking for complexity to fix in code nobody's
 touching.
 
 ```bash
-uv sync --extra complexity                                    # radon + cognitive-complexity
-uv run python3 scripts/check_complexity_ratchet.py --base origin/main
+uv run --with-requirements scripts/gate-requirements.txt \
+  python3 scripts/check_complexity_ratchet.py --base origin/main    # radon + cognitive-complexity
 ```
 
 Wired into CI as the `complexity` job, PR-only, alongside `tidy` and
-`refactor-first`. `Tidy-Exempt:` bypasses it the same way it bypasses the
-other two — one exemption mechanism for all three gates.
+`refactor-first`. `Tidy-Exempt:` waives the debt rules (a touched over-threshold function must come out
+lower; a literal count must not grow) but not the new-code rules: a function, invariant
+return or duplicated literal that did not exist at the base still fails.
 
 ## Patch coverage — new code must be tested, not just committed
 
@@ -424,18 +428,30 @@ fails when a function **this change's diff touches** has a mutation score
 (killed / (killed + survived), mutmut's own metric) below `--threshold`.
 
 ```bash
-uv sync --extra mutation                                      # mutmut
-uv run mutmut run                                              # generates + runs mutants
-uv run python3 scripts/check_mutation_ratchet.py --base origin/main --threshold 80
+T="--with-requirements scripts/gate-requirements.txt"            # mutmut is pinned there
+uv run $T mutmut run                                           # generates + runs mutants
+uv run $T python3 scripts/check_mutation_ratchet.py --base origin/main --threshold 80
 ```
 
-**One of the five default gates (`templates/ci-job.yml`).** Mutation testing reruns your whole test suite
-once per mutant — a different cost order than everything above. Configure
-`[tool.mutmut]` with `source_paths`; the local runner and CI execute it by
-default and reuse the `mutants/` cache. See DESIGN.md's "Mutation ratchet"
-for the full rationale, including why this
+**One of the five default gates (`templates/ci-job.yml`).** Mutation testing
+reruns a focused behavioral test suite once per mutant. Configure
+`[tool.mutmut]` with `source_paths` and
+`pytest_add_cli_args_test_selection` listing the unit-test files marked
+`@pytest.mark.mutation`; the normal test job still runs the complete suite.
+The focused selection prevents mutmut from collecting unrelated integration,
+TUI, and helper modules that make mutation runs needlessly slow or fragile.
+The local runner and CI reuse the `mutants/` cache. See DESIGN.md's
+"Mutation ratchet" for the full rationale, including why this
 checks a flat floor on the current tree rather than a base-vs-head
 comparison like the complexity ratchet.
+
+**Runs are diff-scoped, not whole-campaign.** `scripts/mutation_plan.py run` drops only the cached
+verdicts the diff can have staled — the functions a changed test, fixture, data file or unmutated
+helper reaches — then runs `mutmut run`, which re-tests exactly those and any function whose source
+changed. A full campaign happens on the first initialisation of a repo and on cache-wide causes
+only. Test files you add are measured on a first pass and their functions re-tested on a second.
+A test change that *lowers* the score of a function it covers fails the ratchet, even though the
+function itself was not touched. DESIGN.md's "Diff-scoped mutation runs" has the details and limits.
 
 **A genuinely equivalent mutant** (code where no test *could* tell the
 difference because the behavior really is identical) gets mutmut's own
@@ -443,6 +459,166 @@ difference because the behavior really is identical) gets mutmut's own
 cover`. This fixes the false positive at its source; don't reach for
 `Tidy-Exempt:` for a single surviving mutant, save it for skipping the
 gate entirely on a PR where that's the right call.
+
+**Test-quality rule.** A new or changed behavioral test should be designed to
+kill a meaningful mutation: assert the observable result, cover the relevant
+boundary/error branch, and avoid merely executing the line. Mutation selection
+is diff-scoped and per function. A changed function passes at 80% mutation
+score, or, below 80%, only when it already has a recorded score in
+`.mutation-baseline.json` and improves on it by at least 20%. A function with no
+recorded score — new, or never measured — must reach 80% outright; there is no
+"first run records the baseline" grace. Design its tests for 80% before the
+first push (see `templates/tdd-bdd-yagni.snippet.md`, "Design the tests before
+the code").
+
+## Configuration: craft-gate.toml
+
+Every number and rule a gate uses is a value in one file, `craft-gate.toml`, at the repo root
+(or the same sections under `[tool.craft-gate.<section>]` in `pyproject.toml`; when both exist the
+standalone file wins). `templates/craft-gate.toml` lists every value with its default and a
+comment; copying it unchanged changes nothing, because each value there is the default.
+
+| Section | Values |
+|---|---|
+| `[patch-coverage]`, `[mutation]`, `[bdd]` | `enabled` and `reason`, `threshold` (and `improvement` for mutation), `source`, `paths`, `exclude` |
+| `[complexity]` | `cyclomatic`, `cognitive`, `duplicated-literal-occurrences`, `duplicated-literal-min-length` |
+| `[refactor-first]` | `per-file`: `must-decrease` or `must-not-increase` |
+| `[design-review]` | `max-parameters`, `max-lines` |
+| `[exemptions]` | `legacy-debt` (default true) and `new-code` (default false): what a `Tidy-Exempt:` trailer may waive |
+
+Rules the file follows:
+
+- **Strict.** An unknown section or key, or a value out of range, is an error that names it; it is
+  never silently ignored, so a typo cannot leave a gate at its default while looking configured.
+- **Every value is proven.** `tests/features/config_effects.feature` moves each value and shows
+  the verdict move with it, and a test fails if a value in the schema has no scenario. A value
+  that did nothing would be decoration.
+- **Loosening is a decision.** Raising a limit or lowering a threshold fails no check, so the PR
+  comment lists every value a change makes weaker (`scripts/config_loosening.py`, "Thresholds
+  loosened"), and `templates/CODEOWNERS.snippet` puts the file under review. Never edit a value to
+  make a gate pass; fix the code.
+- **New code stays strict by default.** `exemptions.new-code = true` reopens the loophole that
+  `Tidy-Exempt:` used to be; leave it false.
+
+## Test gates: on unless declared off — patch coverage, mutation, behaviour coverage
+
+Three gates ask whether a change is *tested*, not whether it is well structured:
+patch coverage (changed lines are covered), the mutation ratchet (the tests would
+notice if a touched function's behaviour changed) and behaviour coverage (changed
+lines are covered by Gherkin scenarios, not only by unit tests). All three run by
+default. Before running, each asks `scripts/gate_config.py` what to do:
+
+| The repo... | The gate... |
+|---|---|
+| has what it needs | runs |
+| switched it off in `pyproject.toml`, with a reason | is skipped; the reason is in the job summary and the PR comment |
+| has not switched it off but lacks what it needs | **fails**, saying what to add or how to opt out |
+
+The last row is the point: a gate never passes because it found nothing to check.
+What each one needs: patch coverage a pytest suite; mutation a `[tool.mutmut]`
+section; behaviour coverage `.feature` files under its `paths`. Mutation and
+behaviour coverage measure the same suite patch coverage does, so they are skipped,
+with that as the reason, when patch coverage is off.
+
+```toml
+# craft-gate.toml (or the same tables under [tool.craft-gate.*] in pyproject.toml)
+[patch-coverage]
+threshold = 90            # default; also: source = "your_package"
+
+[mutation]
+enabled = false
+reason = "suite takes 40 minutes; revisit when it is split"
+
+[bdd]
+paths = ["tests/features"]  # default
+threshold = 80              # default
+```
+
+Both coverage gates leave test files out of the measurement (`exclude`, default
+`tests/*`, `test_*.py`, `conftest.py`, and so on): a test's own lines always run, so counting
+them would pad the percentage. A repo that checked this found its behaviour gate passing at
+90% while scenarios covered 71% of the production lines.
+
+A switched-off gate needs a non-empty `reason`; a typo in a section or key is an
+error, not silently ignored. There is no `Tidy-Exempt:` bypass for these gates: the
+way out is the declared opt-out, which stays visible.
+
+**Behaviour coverage.** The gate runs only the behaviour tests (`pytest tests/features
+--cov`) and applies `diff-cover` to that report, so every line the diff changed must
+be exercised by a scenario. A line can be fully covered by unit tests while no
+scenario describes the behaviour it serves; this catches that. A scenario step with
+no definition fails when the behaviour tests run, so orphaned steps surface here too.
+What it cannot see is whether a scenario was written *before* the code. See
+`docs/design/behaviour-coverage.md`.
+
+## What to expect before you push — a checklist from real PRs
+
+The gates are mechanical, and a few of their behaviours surprise whoever meets them for the first time —
+a person or a coding agent. Know these in advance and the first push is the last one.
+
+**Refactor First (`scripts/check_refactor_first.py`)**
+
+- It compares the *committed* range (`origin/main...HEAD`). With uncommitted changes it can print
+  nothing at all, which looks like a pass. Commit first, then run it.
+- A **new file** has no "before", so it must be at **0** detectable smells — all eight, in tests and
+  helpers as much as in source. A touched **existing** file must end **lower** than it began, even if
+  your edit added nothing: touching it is what triggers the duty to fix one instance of each heuristic
+  present. Plan for this when you append a test to a file with older smells.
+- The smells that show up most in new code, and the fix:
+  - *unused function / class / method* (vulture, CG002): code that a framework calls by name or
+    registration — pytest and pytest-bdd tests and steps, `unittest.TestCase` classes, Textual
+    `on_*`/`action_*` handlers, FastAPI route functions, `http.server` `do_GET` — looks unused.
+    Say so on the flagged line with vulture's own code: `# noqa: V103` (function), `V105` (method),
+    `V102` (class), `V101` (attribute), `V107` (variable), with a reason if it is not obvious.
+    Vulture is run over the **whole corpus**, as craftCov does: run `craftcov.py --format json
+    --no-diff --no-cache` for the real findings, not `vulture <one file>`, which reports things another
+    file uses.
+  - *magic number* (PLR2004, CG009): a named constant; for HTTP status codes `http.HTTPStatus.OK`.
+  - *too many arguments* (PLR0913, CG018, more than 5): a small frozen dataclass as parameter object.
+  - *too many statements / branches* (PLR0915 / PLR0912): split into named helpers.
+  - *too many attributes / methods* (R0902 / R0904): split the class, or, for a plain record or a test
+    suite, `# pylint: disable=too-many-instance-attributes  # <why>` on the class line.
+  - *duplicate code* (CG024) counts across files: the same list in a source file and a test, or the
+    same fixture in two test modules, is flagged in both. Import one copy.
+- Fixing a whole new package to 0 is real work. If it is not worth it, `Tidy-Exempt:` is the documented
+  escape — with an honest reason, since a reviewer reads it.
+
+**Tidy First ratchet (`scripts/check_tidy_ratchet.sh`)**
+
+- It reads the commit messages in `origin/main..HEAD`. After a rebase onto a base that squash-merged
+  your earlier work, the `tidy(...)` commit that satisfied it may no longer be in the range: check.
+- A pre-commit hook that reformats files makes `git commit` fail; if its output is filtered, no commit
+  is made and nothing says so. Check `git log -1` after committing.
+
+**Complexity ratchet**
+
+- A touched function over 15 must end **lower**, not just no worse: moving the route handlers out of an
+  over-15 `register_*` function was what made a one-parameter change pass.
+- In touched code, a string literal repeated more than twice (S1192) fails; name it once.
+
+**Patch coverage**
+
+- Only code that the *one* coverage run executes counts. Tests run in another step, another directory
+  outside `testpaths`, or a separate job leave their code at 0%: put them in the same run.
+- Code inside a string (JavaScript or HTML embedded in a Python module) is not measured at all.
+- If any test in the coverage job fails, the patch-coverage step is **skipped**, not failed. A red job
+  whose failure is one flaky test therefore says nothing about coverage: read the *tests* step first.
+
+**Stacked pull requests**
+
+- When the base PR is **squash-merged**, merging `main` into the stacked branch conflicts on every file
+  both touched (add/add). Rebase your own commits instead: `git log --first-parent --no-merges
+  <old-base>..HEAD` lists them; cherry-pick them onto `origin/main` and push with `--force-with-lease`.
+- A gate that compares to `main` counts the base PR's code as yours until it merges (for example a
+  mutation ratchet): say so in the PR description so the reviewer does not read it as your regression.
+
+**Local gate and hooks**
+
+- Prek stashes unstaged changes into a user-global directory (`~/.cache/prek/patches/`) when a hook
+  rewrites files; leftovers make a later full run refuse to start. They are replayed into your tree, so
+  look at what they hold before deleting them.
+- GitHub sometimes answers a push with `Internal Server Error`. Retry after a minute or two before
+  suspecting the branch.
 
 ## Reporting — visible, not just enforced
 
@@ -453,6 +629,24 @@ export showing the repo's current state overall
 (`craftcov.py --format sarif`). Neither is a ratchet — nothing here fails
 a build. See DESIGN.md's **Reporting** section for the full detail and
 the CI wiring.
+
+The same comment carries two more non-blocking sections: **Gates switched off in
+this repo** (any test gate opted out, with its reason), and **Design review
+(advisory)**. The second covers the rules in "New-code principles" that no gate can
+decide from a diff. `scripts/design_review.py` flags, in the Python functions a change
+touched, the smells that usually point at them: a flag argument (a `bool` parameter) for
+*one thing*, more than two parameters, "and" in a name, a `get_`/`is_`/`find_` function
+that changes state (command-query separation), and a function over about 20 lines. They
+are prompts for the reviewer, not findings; nothing fails. The judgement calls with no
+smell to flag (naming, responsibility, whether tests state the behaviour, YAGNI) are on
+the PR checklist, `templates/PULL_REQUEST_TEMPLATE.md`.
+
+**An independent reviewer.** For the same rules, a model can judge what a smell cannot. The
+`craft-reviewer` subagent (`agents/craft-reviewer.md`, run through the `craft-review` skill)
+reviews a branch as a lead developer with no knowledge of how it was written, graded against
+the "New-code principles" above. Every finding must quote the code and cite a catalog code, or
+it is dropped. It is advisory and read-only; it is not a gate, because a model's verdict is not
+repeatable. See `docs/design/reviewer.md`.
 
 ## Don't let the exemption become the rule
 

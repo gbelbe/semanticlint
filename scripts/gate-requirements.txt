@@ -1,0 +1,14 @@
+# The tools the craft-gate jobs run, at exact versions, so a ruff or pylint release cannot change a
+# verdict between the base and the head of a pull request. The CI jobs and the local runner pass
+# this file to `uv run --with-requirements`, so a repo needs no extras of its own for them.
+# To bump: `uv lock --upgrade`, copy the new versions here; a test fails until the two agree.
+pyyaml==6.0.3
+ruff==0.16.9
+pylint==4.0.9
+vulture==2.16
+radon==6.0.1
+cognitive-complexity==1.3.0
+mutmut==3.8.0
+diff-cover==10.6.0
+pytest-cov==7.1.0
+tomli==2.4.1; python_version < "3.11"
